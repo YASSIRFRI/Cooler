@@ -285,7 +285,7 @@ class StressTest {
     case a of
         10 => "ten";
         20 => "twenty";
-        30 => "other";
+        _ => "other";
     esac;
 
     new StressTest;  -- Use of 'new' keyword.

@@ -119,10 +119,9 @@ func (lx *Lexer) nextToken() *Token {
 		return &Token{Type: "TYPE", Value: text, Line: lx.line}
 	}
 
-	// 6. ID: [a-z][A-Za-z0-9_]*
-	if m, text := lx.matchRegex(`^[a-z][A-Za-z0-9_]*`); m {
+	// 6. ID: [a-z][A-Za-z0-9_]* update the regex to include underscore
+	if m, text := lx.matchRegex(`^[a-z_][A-Za-z0-9_]*`); m {
 		lx.pos += len(text)
-		// check reserved keywords (case–insensitive)
 		if t, ok := reserved[strings.ToLower(text)]; ok {
 			return &Token{Type: t, Value: text, Line: lx.line}
 		}
@@ -159,10 +158,10 @@ func (lx *Lexer) nextToken() *Token {
 	case '~':
 		lx.pos++
 		return &Token{Type: "INT_COMP", Value: "~", Line: lx.line}
-	case '<': // if not matched earlier (<- or <=)
+	case '<': 
 		lx.pos++
 		return &Token{Type: "LT", Value: "<", Line: lx.line}
-	case '=': // plain equal sign
+	case '=':
 		lx.pos++
 		return &Token{Type: "EQ", Value: "=", Line: lx.line}
 	case '(':
