@@ -264,3 +264,7 @@ func toInt(s string) int {
 	return n
 }
 
+
+func (lx *Lexer) NextToken() *Token {
+	return lx.nextToken()
+}
