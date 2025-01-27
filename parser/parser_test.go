@@ -274,13 +274,13 @@ func TestComplexProgram(t *testing.T) {
 	input := `
 		class Main {
 		   main(): Int {
-		      let a : Int <- 10, b : Int in a + b;
+		      let a : Int <- 10, b : Int in a + b
 		   };
 		};
 		class Other inherits Main {
 		   greeting : String <- "Hello, world!";
 		   compute(x: Int): Int {
-		      if x < 0 then ~x else x fi;
+		      if x < 0 then ~x else x fi
 		   };
 		};
 	`
