@@ -12,7 +12,6 @@ import (
 )
 
 func main() {
-	// Ensure input directory exists
 	inputDir := "./input"
 	if _, err := os.Stat(inputDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(inputDir, 0755); err != nil {
@@ -22,7 +21,7 @@ func main() {
 	}
 
 	// Read input file
-	inputPath := filepath.Join(inputDir, "sampl2.cl")
+	inputPath := filepath.Join(inputDir, "sample3.cl")
 	input, err := os.ReadFile(inputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to read input file: %v\n", err)
@@ -47,7 +46,7 @@ func main() {
 	}
 
 	// Create (or overwrite) the output DOT file for AST.
-	dotFile, err := os.Create("ast.dot")
+	dotFile, err := os.Create("ast_for_input.dot")
 	if err != nil {
 		fmt.Println("Error creating ast.dot file:", err)
 		return

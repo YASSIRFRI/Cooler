@@ -1,0 +1,67 @@
+// // main.go
+// package main
+
+// import (
+//     "fmt"
+//     "cooler/parser"
+// )
+
+// func main() {
+//     // Construct a minimal AST:
+//     // class Main {
+//     //   main(): Int {
+//     //     {
+//     //       let x:Int <- 10 in (
+//     //         x <- x + 5;
+//     //         x
+//     //       );
+//     //     }
+//     //   };
+//     // };
+//     letAttr := &parser.Attribute{
+//         Ident: "x",
+//         Type:  "Int",
+//         Init:  &parser.IntConst{Value: 10},
+//     }
+//     block := &parser.Block{
+//         Exprs: []parser.Node{
+//             &parser.Assignment{
+//                 Ident: &parser.Ident{Name: "x"},
+//                 Expr: &parser.BinaryOperation{
+//                     Operator: "+",
+//                     Left:     &parser.Ident{Name: "x"},
+//                     Right:    &parser.IntConst{Value: 5},
+//                 },
+//             },
+//             &parser.Ident{Name: "x"},
+//         },
+//     }
+//     letExpr := &parser.Let{
+//         Assignments: []*parser.Attribute{letAttr},
+//         Body:        block,
+//     }
+
+//     method := &parser.Method{
+//         Ident:   "main",
+//         Type:    "Int",
+//         Formals: []*parser.Formal{},
+//         Body: &parser.Block{
+//             // just a block with the let inside for demonstration
+//             Exprs: []parser.Node{letExpr},
+//         },
+//     }
+
+//     mainClass := &parser.Class{
+//         Name:     "Main",
+//         Inherits: "",
+//         Features: []parser.Node{method},
+//     }
+
+//     program := &parser.Program{
+//         Classes: []*parser.Class{mainClass},
+//     }
+
+//     // Now generate LLVM IR
+//     mod := CodegenProgram(program)
+//     fmt.Println(mod.String())
+// }

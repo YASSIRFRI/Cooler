@@ -9,7 +9,6 @@ import (
 )
 
 func main() {
-	// Ensure input directory exists
 	inputDir := "./input"
 	if _, err := os.Stat(inputDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(inputDir, 0755); err != nil {

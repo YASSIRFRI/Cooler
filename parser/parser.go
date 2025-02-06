@@ -532,22 +532,19 @@ func (p *Parser) parseUnaryOperation() (Node, error) {
     return &UnaryOperation{Operator: opTok.Value.(string), Right: right}, nil
 }
 
-// ----------------------------------------------------
-//        *** CHANGED *** parseCaseExpression
-// ----------------------------------------------------
 func (p *Parser) parseCaseExpression() (Node, error) {
-    // we've seen "CASE" already
-    p.nextToken() //  CASE
+    //eat out the CASE token
+    p.nextToken() 
 
     expr, err := p.parseExpression(_LOWEST)
     if err != nil {
         return nil, err
     }
-
+    fmt.Println("The expression in case is: ",expr)
     if p.currentToken() == nil || p.currentToken().Type != "OF" {
         return nil, fmt.Errorf("expected OF after CASE, got %v", p.currentToken())
     }
-    p.nextToken() //  OF
+    p.nextToken() 
 
     var actions []*TypeAction
     for p.currentToken() != nil && p.currentToken().Type != "ESAC" {
@@ -557,7 +554,6 @@ func (p *Parser) parseCaseExpression() (Node, error) {
         }
         actions = append(actions, ta)
 
-        // each branch ends with a semicolon
         if p.currentToken() == nil || p.currentToken().Type != "SEMICOLON" {
             return nil, fmt.Errorf("expected ';' after case branch, got %v", p.currentToken())
         }
@@ -813,6 +809,7 @@ func (p *Parser) parseParamsOpt() ([]Node, error) {
 
 func (p *Parser) parseFeature() (Node, error) {
     idTok := p.currentToken()
+    fmt.Println("The feature name is: ",idTok)
     if idTok == nil || idTok.Type != "ID" {
         return nil, errors.New("expected feature identifier")
     }
@@ -914,7 +911,6 @@ func (p *Parser) parseAttributeDef(attrName string) (Node, error) {
     }, nil
 }
 
-// parseFormals parses zero or more formals of the form: "id : TYPE" separated by commas.
 func (p *Parser) parseFormals() ([]*Formal, error) {
     var formals []*Formal
 
@@ -922,14 +918,12 @@ func (p *Parser) parseFormals() ([]*Formal, error) {
         return formals, nil
     }
 
-    // parse first formal
     f, err := p.parseFormal()
     if err != nil {
         return nil, err
     }
     formals = append(formals, f)
 
-    //other formals
     for p.currentToken() != nil && p.currentToken().Type == "COMMA" {
         p.nextToken() //  comma
         f, err := p.parseFormal()

@@ -1,0 +1,23 @@
+digraph AST {
+    node [shape=box];
+    node0 [label="Program"];
+    node1 [label="Class: MyIO\\n(Inherits: IO)"];
+    node2 [label="Method: main : Object"];
+    node3 [label="Block"];
+    node4 [label="FunctionCall: out_string"];
+    node4 -> node5 [label="Params"];
+    node5 [shape=plaintext, label="Params"];
+    node6 [label="StringConst: \"Hello World\\n\""];
+    node5 -> node6;
+    node3 -> node4;
+    node7 [label="FunctionCall: out_int"];
+    node7 -> node8 [label="Params"];
+    node8 [shape=plaintext, label="Params"];
+    node9 [label="IntConst: 42"];
+    node8 -> node9;
+    node3 -> node7;
+    node2 -> node3 [label="Body"];
+    node1 -> node2;
+    node0 -> node1;
+    node0 [style=filled, fillcolor=lightblue];
+}

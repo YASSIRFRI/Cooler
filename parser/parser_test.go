@@ -219,52 +219,69 @@ func TestLetExpression(t *testing.T) {
 	}
 }
 
-// func TestCaseExpression(t *testing.T) {
-// 	input := `case x of 1 => "one"; 2 => "two"; _ => "other"; esac`
-// 	tokens := tokenize(input)
-// 	p := NewParser(tokens)
-// 	expr, err := p.parseExpression(0)
-// 	if err != nil {
-// 		t.Fatalf("parseExpression error: %v", err)
-// 	}
-// 	caseExpr, ok := expr.(*Case)
-// 	if !ok {
-// 		t.Fatalf("expected Case expression, got %T", expr)
-// 	}
-// 	if caseExpr.Expr == nil {
-// 		t.Errorf("expected case subject expression, got nil")
-// 	}
-// 	if len(caseExpr.TypeActions) != 3 {
-// 		t.Fatalf("expected 3 type actions, got %d", len(caseExpr.TypeActions))
-// 	}
-// 	// First type action: "1 => "one";"
-// 	ta1 := caseExpr.TypeActions[0]
-// 	if ta1.Ident != "1" {
-// 		t.Errorf("expected first type action identifier '1', got %s", ta1.Ident)
-// 	}
-// 	str1, ok := ta1.Expr.(*StringConst)
-// 	if !ok || str1.Value != "one" {
-// 		t.Errorf("expected first type action expr \"one\", got %v", ta1.Expr)
-// 	}
-// 	// Second type action: "2 => "two";"
-// 	ta2 := caseExpr.TypeActions[1]
-// 	if ta2.Ident != "2" {
-// 		t.Errorf("expected second type action identifier '2', got %s", ta2.Ident)
-// 	}
-// 	str2, ok := ta2.Expr.(*StringConst)
-// 	if !ok || str2.Value != "two" {
-// 		t.Errorf("expected second type action expr \"two\", got %v", ta2.Expr)
-// 	}
-// 	// Third type action: "_ => "other";"
-// 	ta3 := caseExpr.TypeActions[2]
-// 	if ta3.Ident != "_" {
-// 		t.Errorf("expected third type action identifier '_', got %s", ta3.Ident)
-// 	}
-// 	str3, ok := ta3.Expr.(*StringConst)
-// 	if !ok || str3.Value != "other" {
-// 		t.Errorf("expected third type action expr \"other\", got %v", ta3.Expr)
-// 	}
-// }
+func TestCaseExpression(t *testing.T) {
+    input := `case x of 
+        l : String => "one"; 
+        ll : String => "two"; 
+        _ : String => "other"; 
+    esac`
+    tokens := tokenize(input)
+    p := NewParser(tokens)
+    expr, err := p.parseExpression(0)
+    if err != nil {
+        t.Fatalf("parseExpression error: %v", err)
+    }
+    caseExpr, ok := expr.(*Case)
+    if !ok {
+        t.Fatalf("expected Case expression, got %T", expr)
+    }
+    if caseExpr.Expr == nil {
+        t.Errorf("expected case subject expression, got nil")
+    }
+    if len(caseExpr.TypeActions) != 3 {
+        t.Fatalf("expected 3 type actions, got %d", len(caseExpr.TypeActions))
+    }
+    
+    // First type action: "l : String => "one";"
+    ta1 := caseExpr.TypeActions[0]
+    if ta1.Ident != "l" {
+        t.Errorf("expected first type action identifier 'l', got %s", ta1.Ident)
+    }
+    if ta1.Type != "String" {
+        t.Errorf("expected first type to be 'String', got %s", ta1.Type)
+    }
+    str1, ok := ta1.Expr.(*StringConst)
+    if !ok || str1.Value != "one" {
+        t.Errorf("expected first type action expr \"one\", got %v", ta1.Expr)
+    }
+
+    // Second type action: "ll : String => "two";"
+    ta2 := caseExpr.TypeActions[1]
+    if ta2.Ident != "ll" {
+        t.Errorf("expected second type action identifier 'll', got %s", ta2.Ident)
+    }
+    if ta2.Type != "String" {
+        t.Errorf("expected second type to be 'String', got %s", ta2.Type)
+    }
+    str2, ok := ta2.Expr.(*StringConst)
+    if !ok || str2.Value != "two" {
+        t.Errorf("expected second type action expr \"two\", got %v", ta2.Expr)
+    }
+
+    // Third type action: "_ : String => "other";"
+    ta3 := caseExpr.TypeActions[2]
+    if ta3.Ident != "_" {
+        t.Errorf("expected third type action identifier '_', got %s", ta3.Ident)
+    }
+    if ta3.Type != "String" {
+        t.Errorf("expected third type to be 'String', got %s", ta3.Type)
+    }
+    str3, ok := ta3.Expr.(*StringConst)
+    if !ok || str3.Value != "other" {
+        t.Errorf("expected third type action expr \"other\", got %v", ta3.Expr)
+    }
+}
+
 
 
 
@@ -479,6 +496,60 @@ func TestUnaryAndBinaryPrecedence(t *testing.T) {
 	int4, ok := bop.Right.(*IntConst)
 	if !ok || int4.Value != 4 {
 		t.Errorf("expected right operand of '+' to be 4, got %v", bop.Right)
+	}
+}
+
+
+// class Looper {
+// 	loop(): Object {
+// 		while 1 loop
+// 			x <- 0
+// 		pool
+// 	};
+// }
+
+func TestWhileLoop(t *testing.T) {
+	input := `
+		class Looper {
+			iterate(): Object {
+				while 1 loop
+					x <- 0
+				pool
+			};
+		};
+	`
+	tokens := tokenize(input)
+	p := NewParser(tokens)
+	prog, err := p.ParseProgram()
+	if err != nil {
+		t.Fatalf("ParseProgram() error: %v", err)
+	}
+	if len(prog.Classes) != 1 {
+		t.Fatalf("expected 1 class, got %d", len(prog.Classes))
+	}
+	looper := prog.Classes[0]
+	if looper.Name != "Looper" {
+		t.Errorf("expected class name 'Looper', got %s", looper.Name)
+	}
+	if len(looper.Features) != 1 {
+		t.Fatalf("expected 1 feature, got %d", len(looper.Features))
+	}
+	loopMethod, ok := looper.Features[0].(*Method)
+	if !ok {
+		t.Fatalf("expected method, got %T", looper.Features[0])
+	}
+	if loopMethod.Ident != "iterate" {
+		t.Errorf("expected method name 'loop', got %s", loopMethod.Ident)
+	}
+	// Assume loopMethod.Body is a While expression.
+	whileExpr, ok := loopMethod.Body.(*While)
+	if !ok {
+		t.Fatalf("expected While expression, got %T", loopMethod.Body)
+	}
+	// Check the condition of the while expression
+	int1, ok := whileExpr.Condition.(*IntConst)
+	if !ok || int1.Value != 1 {
+		t.Errorf("expected while condition to be IntConst(1), got %v", whileExpr.Condition)
 	}
 }
 
