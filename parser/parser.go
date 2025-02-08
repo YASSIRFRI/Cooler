@@ -693,7 +693,6 @@ func (p *Parser) parseCallOrMethodCall(left Node) (Node, error) {
         }, nil
 
     case "AT":
-        // object @ SomeType . method(...)
         p.nextToken() //  '@'
         tyTok := p.currentToken()
         if tyTok == nil || tyTok.Type != "TYPE" {
@@ -705,7 +704,7 @@ func (p *Parser) parseCallOrMethodCall(left Node) (Node, error) {
         if p.currentToken() == nil || p.currentToken().Type != "DOT" {
             return nil, fmt.Errorf("expected DOT after '@ TYPE', got %v", p.currentToken())
         }
-        p.nextToken() //  DOT
+        p.nextToken() 
 
         fnCall, err := p.parseMethodNameAndArgs()
         if err != nil {

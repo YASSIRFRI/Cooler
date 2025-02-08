@@ -21,11 +21,14 @@ func (a paramAttr) IsParamAttribute() {}
 
 const Nocapture paramAttr = "nocapture"
 
+// CodeGenerator now carries extra maps to track COOL type names for variables and attributes.
 type CodeGenerator struct {
 	module           *ir.Module
 	currentFunc      *ir.Func
 	currentBlock     *ir.Block
 	variableEnv      map[string]*ir.InstAlloca // variable name -> alloca
+	// variableTypeEnv maps a variable name (as declared in COOL) to its COOL type.
+	variableTypeEnv map[string]string
 
 	printfFunc *ir.Func
 	scanfFunc  *ir.Func
@@ -37,13 +40,15 @@ type CodeGenerator struct {
 	fmtStringIn *ir.Global // e.g. "%1023s\x00"
 	fmtIntIn    *ir.Global // e.g. "%d\x00"
 
-	// Cache for string constants is no longer used for merging.
-	// We now always generate a new global so that each string gets a unique name.
-	stringConsts     map[string]*ir.Global
-	stringCounter    int
+	// We no longer merge string constants.
+	stringConsts  map[string]*ir.Global
+	stringCounter int
 
-	currentClass     string
+	currentClass string
+	// attributeGlobals maps attributes (named "Class_attribute") to their globals.
 	attributeGlobals map[string]*ir.Global
+	// attributeTypeEnv maps an attribute’s global name (e.g. "Main_cells") to its COOL type.
+	attributeTypeEnv map[string]string
 
 	counter int
 }
@@ -60,8 +65,10 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
 	cg := &CodeGenerator{
 		module:           ir.NewModule(),
 		variableEnv:      make(map[string]*ir.InstAlloca),
+		variableTypeEnv:  make(map[string]string),
 		stringConsts:     make(map[string]*ir.Global),
 		attributeGlobals: make(map[string]*ir.Global),
+		attributeTypeEnv: make(map[string]string),
 	}
 
 	// Declare external I/O functions.
@@ -323,6 +330,7 @@ func (cg *CodeGenerator) genClass(classNode *parser.Class) {
 }
 
 // declareMethod creates the function signature (without a body) for a method.
+// Note: We now add an implicit "self" parameter as the first argument.
 func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) {
 	// Determine the return type based on the method declaration.
 	var retType types.Type
@@ -337,8 +345,10 @@ func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) 
 		retType = types.I32
 	}
 
-	// Note: In a full OO implementation an implicit "self" parameter would be added.
 	var params []*ir.Param
+	// Add the implicit self parameter.
+	selfParam := ir.NewParam("self", types.I32) // Using i32 as a placeholder.
+	params = append(params, selfParam)
 	for _, fm := range method.Formals {
 		var paramType types.Type
 		switch fm.Type {
@@ -347,6 +357,7 @@ func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) 
 		case "String":
 			paramType = types.NewPointer(types.I8)
 		default:
+			// For user-defined classes, we use i32 as a placeholder.
 			paramType = types.I32
 		}
 		params = append(params, ir.NewParam(fm.Ident, paramType))
@@ -360,27 +371,37 @@ func (cg *CodeGenerator) generateMethodBody(className string, method *parser.Met
 	oldFunc := cg.currentFunc
 	oldBlock := cg.currentBlock
 	oldEnv := cg.variableEnv
+	oldTypeEnv := cg.variableTypeEnv
 	oldClass := cg.currentClass
 
 	cg.currentFunc = fn
 	cg.currentBlock = fn.NewBlock("entry")
+	// Create a new environment for variables.
 	cg.variableEnv = make(map[string]*ir.InstAlloca)
+	// Create a new type environment.
+	cg.variableTypeEnv = make(map[string]string)
+	// Set self’s type.
+	cg.variableTypeEnv["self"] = className
 	cg.currentClass = className // Set current class for attribute resolution
 
 	// Allocate parameters and store them in the environment.
-	for _, p := range fn.Params {
+	// Note: fn.Params[0] is the implicit "self" parameter.
+	for i, p := range fn.Params {
 		alloca := cg.currentBlock.NewAlloca(p.Type())
 		cg.currentBlock.NewStore(p, alloca)
 		cg.variableEnv[p.LocalName] = alloca
+		// For self, we already set its type. For the rest, use the method’s formals.
+		if i > 0 && i-1 < len(method.Formals) {
+			cg.variableTypeEnv[p.LocalName] = method.Formals[i-1].Type
+		}
 	}
 
 	retVal := cg.genExpr(method.Body)
-	fmt.Println("From Codegen retVal: ", retVal)
 	cg.currentBlock.NewRet(retVal)
-
 	cg.currentFunc = oldFunc
 	cg.currentBlock = oldBlock
 	cg.variableEnv = oldEnv
+	cg.variableTypeEnv = oldTypeEnv
 	cg.currentClass = oldClass
 }
 
@@ -425,6 +446,8 @@ func (cg *CodeGenerator) genAttribute(className string, attr *parser.Attribute) 
 		global = cg.module.NewGlobalDef(globalName, constant.NewInt(types.I32, 0))
 	}
 	cg.attributeGlobals[globalName] = global
+	// Record the COOL type for the attribute.
+	cg.attributeTypeEnv[globalName] = attr.Type
 }
 
 // Dispatch expression types.
@@ -481,6 +504,8 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 		return cg.genUnaryOp(n)
 	case *parser.New:
 		// In a robust implementation this would allocate a new object.
+		// For now, return a dummy value. The important part is that the AST node
+		// carries the correct type in its TypeName field.
 		return constant.NewInt(types.I32, 0)
 	case *parser.Let:
 		return cg.genLet(n)
@@ -617,6 +642,10 @@ func (cg *CodeGenerator) genLet(l *parser.Let) value.Value {
 	for k, v := range oldEnv {
 		cg.variableEnv[k] = v
 	}
+	if cg.variableTypeEnv == nil {
+		cg.variableTypeEnv = make(map[string]string)
+	}
+	// Process let assignments.
 	for _, assignment := range l.Assignments {
 		fmt.Printf("Let assignment: %s : %s\n", assignment.Ident, assignment.Type)
 		var varType types.Type
@@ -630,6 +659,8 @@ func (cg *CodeGenerator) genLet(l *parser.Let) value.Value {
 		}
 		alloca := cg.currentBlock.NewAlloca(varType)
 		cg.variableEnv[assignment.Ident] = alloca
+		// Record the COOL type in the environment.
+		cg.variableTypeEnv[assignment.Ident] = assignment.Type
 		var initVal value.Value
 		if assignment.Init != nil {
 			initVal = cg.genExpr(assignment.Init)
@@ -719,15 +750,30 @@ func (cg *CodeGenerator) genCallInInt() value.Value {
 //  - Evaluates the receiver and passes it as the first argument.
 //  - For built-in String methods (length, concat, substr), uses our defined functions.
 func (cg *CodeGenerator) genMethodCall(mc *parser.MethodCall) value.Value {
-	// Evaluate the receiver.
 	var receiver value.Value
+	var receiverType string
 	if mc.Object != nil {
 		receiver = cg.genExpr(mc.Object)
+		// Check if the receiver is a "new" expression. We assume that *parser.New nodes have a TypeName field.
+		if newExpr, ok := mc.Object.(*parser.New); ok {
+			receiverType = newExpr.Type
+		} else if ident, ok := mc.Object.(*parser.Ident); ok {
+			if t, found := cg.variableTypeEnv[ident.Name]; found {
+				receiverType = t
+			} else {
+				globalName := fmt.Sprintf("%s_%s", cg.currentClass, ident.Name)
+				if t, found := cg.attributeTypeEnv[globalName]; found {
+					receiverType = t
+				}
+			}
+		}
+		if receiverType == "" {
+			receiverType = cg.currentClass
+		}
 	} else {
-		// If no receiver is provided, default to "self" (not fully implemented).
 		receiver = constant.NewInt(types.I32, 0)
+		receiverType = cg.currentClass
 	}
-	// Evaluate method arguments.
 	var args []value.Value
 	// Pass the receiver as the first (implicit) parameter.
 	args = append(args, receiver)
@@ -736,14 +782,14 @@ func (cg *CodeGenerator) genMethodCall(mc *parser.MethodCall) value.Value {
 	}
 	name := mc.Method.Ident
 	var calleeName string
-	// For built-in String methods, force the callee name.
 	if name == "length" || name == "concat" || name == "substr" {
 		calleeName = "String_" + name
 	} else {
-		// For other methods, if not already qualified, prefix with current class.
-		if cg.currentClass != "" && !strings.Contains(name, "_") {
-			calleeName = fmt.Sprintf("%s_%s", cg.currentClass, name)
+		if receiverType != "" && !strings.Contains(name, "_") {
+			fmt.Println("receiverType: ", receiverType)
+			calleeName = fmt.Sprintf("%s_%s", receiverType, name)
 		} else {
+			fmt.Println("name: ", name)
 			calleeName = name
 		}
 	}

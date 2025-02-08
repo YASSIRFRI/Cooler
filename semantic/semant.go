@@ -202,10 +202,6 @@ func (sa *SemanticAnalyzer) verbosef(context, format string, args ...interface{}
 	sa.errors = append(sa.errors, prefix+msg)
 }
 
-func (sa *SemanticAnalyzer) errorf(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	sa.errors = append(sa.errors, "[SEMANT-ERROR] "+msg)
-}
 
 func (sa *SemanticAnalyzer) Analyze(program *parser.Program) {
 	sa.buildClassSymbols(program)
@@ -700,7 +696,6 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 			}
 			return sa.getExprType(syntheticMC, scope, currentClass)
 		default:
-			// normal local function call
 			name := e.Ident
 			entry, ok := scope.Lookup(name)
 			if !ok || entry.Method == nil {
@@ -711,7 +706,6 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 				}
 				return "Object"
 			}
-			// check param count
 			if len(e.Params) != len(entry.Method.ParamTypes) {
 				sa.verbosef("getExprType(functionCall)",
 					"function %q expects %d args, got %d",
@@ -797,14 +791,9 @@ func (sa *SemanticAnalyzer) isTypeConformant(actual, expected string) bool {
 	if actual == expected {
 		return true
 	}
-	// For debugging, you may print the parent chain:
-	// fmt.Printf("Checking %q against %q\n", actual, expected)
 	current := actual
 	for {
-		// Uncomment the following lines to trace parent lookup:
-		// fmt.Printf("  - %q\n", current)
 		p, hasParent := sa.parentOf[current]
-		// fmt.Printf("  - %q\n", p)
 		if !hasParent {
 			break
 		}
