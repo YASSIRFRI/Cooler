@@ -21,7 +21,7 @@ func main() {
 	}
 
 	// Read input file
-	inputPath := filepath.Join(inputDir, "sample3.cl")
+	inputPath := filepath.Join(inputDir, "sample4.cl")
 	input, err := os.ReadFile(inputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to read input file: %v\n", err)

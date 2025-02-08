@@ -67,6 +67,9 @@ func main() {
 	fmt.Println("Semantic analysis passed.")
 
 	llvmModule := codegen.CodegenProgram(prog)
+	//fmt.Println(llvmModule)
+	fmt.Println("IR Code generation completed.")
+	fmt.Println("\033[1;34m========================================\033[0m")
 	llvmIR := llvmModule.String()
 	baseName := strings.TrimSuffix(sourceFile, ".cool")
 	llFile := baseName + ".ll"

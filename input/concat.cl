@@ -1,5 +1,5 @@
 class Main inherits IO {
-    main(): IO {
+    main(): Object {
         let str1 : String <- "Hello, ",
             str2 : String <- "world!",
             str3 : String <- "Cool programming language" 

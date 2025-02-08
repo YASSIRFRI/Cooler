@@ -14,40 +14,40 @@ import (
 	"github.com/llir/llvm/ir/value"
 )
 
-// --------------------------------------------------------------------------
-// Helper for Parameter Attributes
-// --------------------------------------------------------------------------
-
-// paramAttr implements the ir.ParamAttribute interface.
 type paramAttr string
 
-func (a paramAttr) String() string           { return string(a) }
-func (a paramAttr) IsParamAttribute()          {} // no-op
+func (a paramAttr) String() string    { return string(a) }
+func (a paramAttr) IsParamAttribute() {}
+
 const Nocapture paramAttr = "nocapture"
 
-// --------------------------------------------------------------------------
-// CodeGenerator Structure
-// --------------------------------------------------------------------------
-
 type CodeGenerator struct {
-	module       *ir.Module                // The LLVM IR module being built.
-	currentFunc  *ir.Func                  // The current function.
-	currentBlock *ir.Block                 // The current basic block.
-	variableEnv  map[string]*ir.InstAlloca // Map from variable name to alloca.
+	module           *ir.Module
+	currentFunc      *ir.Func
+	currentBlock     *ir.Block
+	variableEnv      map[string]*ir.InstAlloca // variable name -> alloca
 
-	printfFunc   *ir.Func // External function: printf.
-	scanf        *ir.Func // External function: scanf.
+	printfFunc *ir.Func
+	scanfFunc  *ir.Func
 
-	// Global format strings for printing.
-	// (Note: "%s\n" and "%d\n" are 4-byte constants including the null terminator.)
-	fmtString *ir.Global // For strings: e.g. "%s\n"
-	fmtInt    *ir.Global // For integers: e.g. "%d\n"
+	// Format strings for output and input.
+	// (Note: Removed the extra newline characters for out_string and out_int.)
+	fmtString   *ir.Global // e.g. "%s"
+	fmtInt      *ir.Global // e.g. "%d"
+	fmtStringIn *ir.Global // e.g. "%1023s\x00"
+	fmtIntIn    *ir.Global // e.g. "%d\x00"
 
-	// Cache for string constants.
-	stringConsts map[string]*ir.Global
+	// Cache for string constants is no longer used for merging.
+	// We now always generate a new global so that each string gets a unique name.
+	stringConsts     map[string]*ir.Global
+	stringCounter    int
+
+	currentClass     string
+	attributeGlobals map[string]*ir.Global
+
+	counter int
 }
 
-// uniqueGlobalName returns a unique name using the given prefix.
 func (cg *CodeGenerator) uniqueGlobalName(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, len(cg.module.Globals))
 }
@@ -58,33 +58,31 @@ func (cg *CodeGenerator) uniqueGlobalName(prefix string) string {
 
 func CodegenProgram(prog *parser.Program) *ir.Module {
 	cg := &CodeGenerator{
-		module:       ir.NewModule(),
-		variableEnv:  make(map[string]*ir.InstAlloca),
-		stringConsts: make(map[string]*ir.Global),
+		module:           ir.NewModule(),
+		variableEnv:      make(map[string]*ir.InstAlloca),
+		stringConsts:     make(map[string]*ir.Global),
+		attributeGlobals: make(map[string]*ir.Global),
 	}
 
 	// Declare external I/O functions.
 	cg.declareExternalIO()
+	// Declare external malloc (used by our string functions).
+	cg.declareMalloc()
+	// Define our built-in string methods.
+	cg.defineStringLength()
+	cg.defineStringConcat()
+	cg.defineStringSubstr()
 
-	// Create globals for our format strings.
-	// "%s\n" as a [4 x i8] constant.
-	cg.fmtString = cg.module.NewGlobalDef(cg.uniqueGlobalName("fmt_str"), constant.NewCharArrayFromString("%s\n\x00"))
-	cg.fmtString.Immutable = true
-	// "%d\n" as a [4 x i8] constant.
-	cg.fmtInt = cg.module.NewGlobalDef(cg.uniqueGlobalName("fmt_int"), constant.NewCharArrayFromString("%d\n\x00"))
-	cg.fmtInt.Immutable = true
-
-	// Create the main entry function.
 	mainFn := cg.module.NewFunc("main", types.I32)
 	cg.currentFunc = mainFn
 	cg.currentBlock = mainFn.NewBlock("entry")
 
-	// Generate IR for each class.
+	// Generate IR for each COOL class.
 	for _, classNode := range prog.Classes {
 		cg.genClass(classNode)
 	}
 
-	// Look for an entry method ("Main_main" or "<ClassName>_main").
+	// Attempt to find "Main_main" or "<ClassName>_main" as the entry method.
 	var entryFn *ir.Func
 	if fn := findFuncByName(cg.module, "Main_main"); fn != nil {
 		entryFn = fn
@@ -98,10 +96,10 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
 		}
 	}
 
+	// If found, call it and return its value. Otherwise just return 0.
 	if entryFn != nil {
-		// Call the entry method.
-		_ = cg.currentBlock.NewCall(entryFn)
-		cg.currentBlock.NewRet(constant.NewInt(types.I32, 0))
+		retVal := cg.currentBlock.NewCall(entryFn)
+		cg.currentBlock.NewRet(retVal)
 	} else {
 		cg.currentBlock.NewRet(constant.NewInt(types.I32, 0))
 	}
@@ -109,7 +107,6 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
 	return cg.module
 }
 
-// findFuncByName returns the function from the module whose name matches.
 func findFuncByName(mod *ir.Module, name string) *ir.Func {
 	for _, fn := range mod.Funcs {
 		if fn.Name() == name {
@@ -120,23 +117,179 @@ func findFuncByName(mod *ir.Module, name string) *ir.Func {
 }
 
 // --------------------------------------------------------------------------
-// External I/O Declarations
+// External Declarations
 // --------------------------------------------------------------------------
 
 func (cg *CodeGenerator) declareExternalIO() {
-	// Declare printf: i32 @printf(i8* nocapture, ...).
+	// 1) printf
+	// i32 @printf(i8* nocapture, ...)
 	printfParam := ir.NewParam("fmt", types.NewPointer(types.I8))
 	printfParam.Attrs = append(printfParam.Attrs, Nocapture)
-	printfFn := cg.module.NewFunc("printf", types.I32, printfParam)
-	printfFn.Sig.Variadic = true
-	cg.printfFunc = printfFn
+	cg.printfFunc = cg.module.NewFunc("printf", types.I32, printfParam)
+	cg.printfFunc.Sig.Variadic = true
 
-	// Declare scanf similarly.
+	// 2) scanf
+	// i32 @scanf(i8* nocapture, ...)
 	scanfParam := ir.NewParam("fmt", types.NewPointer(types.I8))
 	scanfParam.Attrs = append(scanfParam.Attrs, Nocapture)
-	scanfFn := cg.module.NewFunc("scanf", types.I32, scanfParam)
-	scanfFn.Sig.Variadic = true
-	cg.scanf = scanfFn
+	cg.scanfFunc = cg.module.NewFunc("scanf", types.I32, scanfParam)
+	cg.scanfFunc.Sig.Variadic = true
+
+	// Create global format strings for printing:
+	//   "%s" and "%d"
+	cg.fmtString = cg.module.NewGlobalDef(
+		cg.uniqueGlobalName("fmt_str"),
+		constant.NewCharArrayFromString("%s\x00"),
+	)
+	cg.fmtString.Immutable = true
+
+	cg.fmtInt = cg.module.NewGlobalDef(
+		cg.uniqueGlobalName("fmt_int"),
+		constant.NewCharArrayFromString("%d\x00"),
+	)
+	cg.fmtInt.Immutable = true
+
+	// Create global format strings for reading:
+	//   "%1023s\x00" and "%d\x00"
+	cg.fmtStringIn = cg.module.NewGlobalDef(
+		cg.uniqueGlobalName("fmt_str_in"),
+		constant.NewCharArrayFromString("%1023s\x00"),
+	)
+	cg.fmtStringIn.Immutable = true
+
+	cg.fmtIntIn = cg.module.NewGlobalDef(
+		cg.uniqueGlobalName("fmt_int_in"),
+		constant.NewCharArrayFromString("%d\x00"),
+	)
+	cg.fmtIntIn.Immutable = true
+}
+
+func (cg *CodeGenerator) declareMalloc() {
+	cg.module.NewFunc("malloc", types.NewPointer(types.I8), ir.NewParam("size", types.I64))
+}
+
+// --------------------------------------------------------------------------
+// Built-in String Methods Definitions
+// --------------------------------------------------------------------------
+
+// defineStringLength implements:
+//    i32 @String_length(i8* %str)
+func (cg *CodeGenerator) defineStringLength() {
+	// Function signature.
+	param := ir.NewParam("str", types.NewPointer(types.I8))
+	fn := cg.module.NewFunc("String_length", types.I32, param)
+	entry := fn.NewBlock("entry")
+	// Allocate counter.
+	counterAlloca := entry.NewAlloca(types.I32)
+	entry.NewStore(constant.NewInt(types.I32, 0), counterAlloca)
+	// Branch to loop.
+	loop := fn.NewBlock("loop")
+	entry.NewBr(loop)
+	// Loop block.
+	counter := loop.NewLoad(types.I32, counterAlloca)
+	// Get pointer to current character.
+	charPtr := loop.NewGetElementPtr(types.I8, fn.Params[0], counter)
+	ch := loop.NewLoad(types.I8, charPtr)
+	// Compare with null terminator.
+	cmp := loop.NewICmp(enum.IPredEQ, ch, constant.NewInt(types.I8, 0))
+	incBlock := fn.NewBlock("inc")
+	exit := fn.NewBlock("exit")
+	loop.NewCondBr(cmp, exit, incBlock)
+	// Increment block.
+	counterNext := incBlock.NewAdd(counter, constant.NewInt(types.I32, 1))
+	incBlock.NewStore(counterNext, counterAlloca)
+	incBlock.NewBr(loop)
+	// Exit: return counter.
+	retVal := exit.NewLoad(types.I32, counterAlloca)
+	exit.NewRet(retVal)
+}
+
+// defineStringConcat implements:
+//    i8* @String_concat(i8* %str, i8* %other)
+func (cg *CodeGenerator) defineStringConcat() {
+	// Function signature.
+	param1 := ir.NewParam("str", types.NewPointer(types.I8))
+	param2 := ir.NewParam("other", types.NewPointer(types.I8))
+	fn := cg.module.NewFunc("String_concat", types.NewPointer(types.I8), param1, param2)
+	entry := fn.NewBlock("entry")
+	// Call String_length on both parameters.
+	len1 := entry.NewCall(findFuncByName(cg.module, "String_length"), fn.Params[0])
+	len2 := entry.NewCall(findFuncByName(cg.module, "String_length"), fn.Params[1])
+	total := entry.NewAdd(len1, len2)
+	totalPlus := entry.NewAdd(total, constant.NewInt(types.I32, 1))
+	totalLL := entry.NewSExt(totalPlus, types.I64)
+	// Call malloc to allocate new string.
+	mallocFn := findFuncByName(cg.module, "malloc")
+	newStr := entry.NewCall(mallocFn, totalLL)
+	// Use llvm.memcpy to copy the two strings.
+	// Declare (if not already declared) the memcpy intrinsic.
+	memcpyName := "llvm.memcpy.p0i8.p0i8.i64"
+	memcpyFn := findFuncByName(cg.module, memcpyName)
+	if memcpyFn == nil {
+		// Signature: void (i8*, i8*, i64, i32, i1)
+		memcpyFn = cg.module.NewFunc(memcpyName, types.Void,
+			ir.NewParam("dest", types.NewPointer(types.I8)),
+			ir.NewParam("src", types.NewPointer(types.I8)),
+			ir.NewParam("size", types.I64),
+			ir.NewParam("align", types.I32),
+			ir.NewParam("isvolatile", types.I1))
+		memcpyFn.Sig.Variadic = false
+	}
+	// Copy first string.
+	size1 := entry.NewSExt(len1, types.I64)
+	entry.NewCall(memcpyFn, newStr, fn.Params[0], size1, constant.NewInt(types.I32, 1), constant.NewInt(types.I1, 0))
+	// Copy second string.
+	dest2 := entry.NewGetElementPtr(types.I8, newStr, len1)
+	size2 := entry.NewSExt(len2, types.I64)
+	entry.NewCall(memcpyFn, dest2, fn.Params[1], size2, constant.NewInt(types.I32, 1), constant.NewInt(types.I1, 0))
+	// Write null terminator at the end.
+	nullPtr := entry.NewGetElementPtr(types.I8, newStr, total)
+	entry.NewStore(constant.NewInt(types.I8, 0), nullPtr)
+	entry.NewRet(newStr)
+}
+
+// defineStringSubstr implements:
+//    i8* @String_substr(i8* %str, i32 %start, i32 %len)
+func (cg *CodeGenerator) defineStringSubstr() {
+	// Function signature.
+	param1 := ir.NewParam("str", types.NewPointer(types.I8))
+	param2 := ir.NewParam("start", types.I32)
+	param3 := ir.NewParam("len", types.I32)
+	fn := cg.module.NewFunc("String_substr", types.NewPointer(types.I8), param1, param2, param3)
+	entry := fn.NewBlock("entry")
+	// For simplicity, we ignore bounds checking.
+	// Allocate new string: (len + 1) bytes.
+	lenPlus := entry.NewAdd(fn.Params[2], constant.NewInt(types.I32, 1))
+	lenPlusLL := entry.NewSExt(lenPlus, types.I64)
+	mallocFn := findFuncByName(cg.module, "malloc")
+	newStr := entry.NewCall(mallocFn, lenPlusLL)
+	// Allocate a local index variable.
+	idxAlloca := entry.NewAlloca(types.I32)
+	entry.NewStore(constant.NewInt(types.I32, 0), idxAlloca)
+	// Branch to loop.
+	loop := fn.NewBlock("loop")
+	entry.NewBr(loop)
+	// In loop: if idx < len then copy character; else branch to finish.
+	idx := loop.NewLoad(types.I32, idxAlloca)
+	cond := loop.NewICmp(enum.IPredSLT, idx, fn.Params[2])
+	body := fn.NewBlock("body")
+	finish := fn.NewBlock("finish")
+	loop.NewCondBr(cond, body, finish)
+	// In body: compute source pointer = str + (start + idx)
+	sum := body.NewAdd(fn.Params[1], idx)
+	srcPtr := body.NewGetElementPtr(types.I8, fn.Params[0], sum)
+	ch := body.NewLoad(types.I8, srcPtr)
+	// Destination pointer = newStr + idx
+	dstPtr := body.NewGetElementPtr(types.I8, newStr, idx)
+	body.NewStore(ch, dstPtr)
+	// Increment idx.
+	idxNext := body.NewAdd(idx, constant.NewInt(types.I32, 1))
+	body.NewStore(idxNext, idxAlloca)
+	body.NewBr(loop)
+	// In finish: store null terminator at newStr + len.
+	dstTerm := finish.NewGetElementPtr(types.I8, newStr, fn.Params[2])
+	finish.NewStore(constant.NewInt(types.I8, 0), dstTerm)
+	finish.NewRet(newStr)
 }
 
 // --------------------------------------------------------------------------
@@ -144,66 +297,137 @@ func (cg *CodeGenerator) declareExternalIO() {
 // --------------------------------------------------------------------------
 
 func (cg *CodeGenerator) genClass(classNode *parser.Class) {
+	var methods []*parser.Method
+	// First pass: declare methods and process attributes.
 	for _, feat := range classNode.Features {
 		switch f := feat.(type) {
 		case *parser.Method:
-			cg.genMethod(classNode.Name, f)
+			methods = append(methods, f)
+			cg.declareMethod(classNode.Name, f)
 		case *parser.Attribute:
-			// Attributes not implemented in this minimal codegen.
+			cg.genAttribute(classNode.Name, f)
 		default:
 			fmt.Printf("Unknown feature type %T in class %s\n", f, classNode.Name)
 		}
 	}
+	// Second pass: generate method bodies.
+	for _, m := range methods {
+		fnName := fmt.Sprintf("%s_%s", classNode.Name, m.Ident)
+		fn := findFuncByName(cg.module, fnName)
+		if fn == nil {
+			fmt.Printf("Error: function %s not declared\n", fnName)
+		} else {
+			cg.generateMethodBody(classNode.Name, m, fn)
+		}
+	}
 }
 
-// genMethod generates a function named "<ClassName>_<MethodName>".
-// For I/O methods, we expect the body to include calls to out_string or out_int.
-func (cg *CodeGenerator) genMethod(className string, method *parser.Method) {
-	// For simplicity, every method returns an i32.
+// declareMethod creates the function signature (without a body) for a method.
+func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) {
+	// Determine the return type based on the method declaration.
+	var retType types.Type
+	switch method.Type {
+	case "Int":
+		retType = types.I32
+	case "String":
+		retType = types.NewPointer(types.I8)
+	case "Bool":
+		retType = types.I32
+	default:
+		retType = types.I32
+	}
+
+	// Note: In a full OO implementation an implicit "self" parameter would be added.
 	var params []*ir.Param
 	for _, fm := range method.Formals {
-		param := ir.NewParam(fm.Ident, types.I32)
-		params = append(params, param)
+		var paramType types.Type
+		switch fm.Type {
+		case "Int":
+			paramType = types.I32
+		case "String":
+			paramType = types.NewPointer(types.I8)
+		default:
+			paramType = types.I32
+		}
+		params = append(params, ir.NewParam(fm.Ident, paramType))
 	}
 	fnName := fmt.Sprintf("%s_%s", className, method.Ident)
-	fn := cg.module.NewFunc(fnName, types.I32, params...)
+	cg.module.NewFunc(fnName, retType, params...)
+}
 
-	// Save old state.
+// generateMethodBody fills in the body of a previously declared function.
+func (cg *CodeGenerator) generateMethodBody(className string, method *parser.Method, fn *ir.Func) {
 	oldFunc := cg.currentFunc
 	oldBlock := cg.currentBlock
 	oldEnv := cg.variableEnv
+	oldClass := cg.currentClass
 
 	cg.currentFunc = fn
 	cg.currentBlock = fn.NewBlock("entry")
 	cg.variableEnv = make(map[string]*ir.InstAlloca)
+	cg.currentClass = className // Set current class for attribute resolution
 
-	// Allocate each formal parameter.
+	// Allocate parameters and store them in the environment.
 	for _, p := range fn.Params {
-		alloca := cg.currentBlock.NewAlloca(types.I32)
+		alloca := cg.currentBlock.NewAlloca(p.Type())
 		cg.currentBlock.NewStore(p, alloca)
 		cg.variableEnv[p.LocalName] = alloca
 	}
 
-	// Generate code for the method body.
-	// (For a method such as MyIO_main, the body should contain an out_string call.)
-	_ = cg.genExpr(method.Body)
+	retVal := cg.genExpr(method.Body)
+	fmt.Println("From Codegen retVal: ", retVal)
+	cg.currentBlock.NewRet(retVal)
 
-	// IMPORTANT: For I/O methods we want to generate a call to printf.
-	// For example, if the body was "out_string("Hello World\n");", then
-	// genExpr will generate a method call that produces:
-	//    %str_ptr = getelementptr [13 x i8], [13 x i8]* @str_0, i32 0, i32 0
-	//    %fmt_ptr = getelementptr [4 x i8], [4 x i8]* @fmt_str_0, i32 0, i32 0
-	//    %res = call i32 (i8*, ...) @printf(i8* %fmt_ptr, i8* %str_ptr)
-	// We then ignore %res and simply return 0.
-	cg.currentBlock.NewRet(constant.NewInt(types.I32, 0))
-
-	// Restore old state.
 	cg.currentFunc = oldFunc
 	cg.currentBlock = oldBlock
 	cg.variableEnv = oldEnv
+	cg.currentClass = oldClass
 }
 
-// genExpr dispatches code generation based on AST node type.
+func (cg *CodeGenerator) genAttribute(className string, attr *parser.Attribute) {
+	var initVal value.Value
+	switch attr.Type {
+	case "Int":
+		initVal = constant.NewInt(types.I32, 0)
+		if attr.Init != nil {
+			if intConst, ok := attr.Init.(*parser.IntConst); ok {
+				initVal = constant.NewInt(types.I32, int64(intConst.Value))
+			} else {
+				fmt.Printf("Non-integer initializer for attribute %s.%s, defaulting to 0\n", className, attr.Ident)
+			}
+		}
+	case "String":
+		var strVal string
+		if attr.Init != nil {
+			if strConst, ok := attr.Init.(*parser.StringConst); ok {
+				strVal = strConst.Value
+			} else {
+				fmt.Printf("Non-string initializer for attribute %s.%s, defaulting to empty string\n", className, attr.Ident)
+				strVal = ""
+			}
+		} else {
+			strVal = ""
+		}
+		gStr := cg.getOrCreateGlobalString(strVal)
+		zero := constant.NewInt(types.I32, 0)
+		initVal = constant.NewGetElementPtr(gStr.ContentType, gStr, zero, zero)
+	default:
+		initVal = constant.NewInt(types.I32, 0)
+	}
+	globalName := fmt.Sprintf("%s_%s", className, attr.Ident)
+	var global *ir.Global
+	switch attr.Type {
+	case "Int":
+		global = cg.module.NewGlobalDef(globalName, initVal.(*constant.Int))
+	case "String":
+		global = cg.module.NewGlobalDef(globalName, initVal.(*constant.ExprGetElementPtr))
+	default:
+		global = cg.module.NewGlobalDef(globalName, constant.NewInt(types.I32, 0))
+	}
+	cg.attributeGlobals[globalName] = global
+}
+
+// Dispatch expression types.
 func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 	switch n := node.(type) {
 	case *parser.IntConst:
@@ -214,20 +438,29 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 		}
 		return constant.NewInt(types.I32, 0)
 	case *parser.StringConst:
-		// Return an i8* pointer to a global string.
 		return cg.genStringConstantPtr(n.Value)
 	case *parser.Self:
+		// For a self expression we return a pointer to self.
+		// (This is a placeholder – a full object model would need proper self handling.)
 		return constant.NewInt(types.I32, 0)
 	case *parser.Ident:
 		if alloca, ok := cg.variableEnv[n.Name]; ok {
-			return cg.currentBlock.NewLoad(types.I32, alloca)
+			fmt.Printf("IDENT %s found, loading from alloca %v\n", n.Name, alloca)
+			return cg.currentBlock.NewLoad(alloca.ElemType, alloca)
 		}
+		if cg.currentClass != "" {
+			globalName := fmt.Sprintf("%s_%s", cg.currentClass, n.Name)
+			if global, ok := cg.attributeGlobals[globalName]; ok {
+				return cg.currentBlock.NewLoad(global.ContentType, global)
+			}
+		}
+		fmt.Printf("IDENT %s not found, defaulting to 0.\n", n.Name)
 		return constant.NewInt(types.I32, 0)
 	case *parser.Assignment:
 		val := cg.genExpr(n.Expr)
 		alloca, ok := cg.variableEnv[n.Ident.Name]
 		if !ok {
-			alloca = cg.currentBlock.NewAlloca(types.I32)
+			alloca = cg.currentBlock.NewAlloca(val.Type())
 			cg.variableEnv[n.Ident.Name] = alloca
 		}
 		cg.currentBlock.NewStore(val, alloca)
@@ -247,7 +480,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 	case *parser.UnaryOperation:
 		return cg.genUnaryOp(n)
 	case *parser.New:
-		fmt.Printf("NEW %s => placeholder 0.\n", n.Type)
+		// In a robust implementation this would allocate a new object.
 		return constant.NewInt(types.I32, 0)
 	case *parser.Let:
 		return cg.genLet(n)
@@ -263,50 +496,58 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 	}
 }
 
-// genStringConstantPtr returns an i8* pointer to a global string constant.
+// --------------------------------------------------------------------------
+// String Helpers
+// --------------------------------------------------------------------------
+
+// genStringConstantPtr always creates a new global string constant with a unique name.
 func (cg *CodeGenerator) genStringConstantPtr(strVal string) value.Value {
+	// Replace literal "\n" with an actual newline.
+	strVal = strings.ReplaceAll(strVal, "\\n", "\n")
 	g := cg.getOrCreateGlobalString(strVal)
 	zero := constant.NewInt(types.I32, 0)
 	return cg.currentBlock.NewGetElementPtr(g.ContentType, g, zero, zero)
 }
 
 func (cg *CodeGenerator) getOrCreateGlobalString(strVal string) *ir.Global {
-	// Replace escape sequences (e.g. "\n") with actual newlines.
-	strVal = strings.ReplaceAll(strVal, "\\n", "\n")
-	if g, ok := cg.stringConsts[strVal]; ok {
-		return g
-	}
 	if !strings.HasSuffix(strVal, "\x00") {
 		strVal += "\x00"
 	}
+	globalName := fmt.Sprintf("str_%d", cg.stringCounter)
+	cg.stringCounter++
 	arr := constant.NewCharArrayFromString(strVal)
-	globalName := fmt.Sprintf("str_%d", len(cg.stringConsts))
 	g := cg.module.NewGlobalDef(globalName, arr)
 	g.Immutable = true
-	cg.stringConsts[strVal] = g
+	// (We do not cache here so that each occurrence is unique.)
 	return g
 }
 
 // --------------------------------------------------------------------------
-// Control Structures (if, while, binary, unary, let, case)
-// (Omitted for brevity; assume these remain unchanged.)
+// Control Structures
 // --------------------------------------------------------------------------
 
 func (cg *CodeGenerator) genIf(i *parser.If) value.Value {
 	condVal := cg.genExpr(i.Condition)
 	isTrue := cg.currentBlock.NewICmp(enum.IPredNE, condVal, constant.NewInt(types.I32, 0))
-	thenBlock := cg.currentFunc.NewBlock("if_then")
-	elseBlock := cg.currentFunc.NewBlock("if_else")
-	endBlock := cg.currentFunc.NewBlock("if_end")
+	thenBlock := cg.currentFunc.NewBlock(cg.newUniqueName("if_then"))
+	elseBlock := cg.currentFunc.NewBlock(cg.newUniqueName("if_else"))
+	mergeBlock := cg.currentFunc.NewBlock(cg.newUniqueName("if_end"))
 	cg.currentBlock.NewCondBr(isTrue, thenBlock, elseBlock)
+	// Then branch.
 	cg.currentBlock = thenBlock
 	thenVal := cg.genExpr(i.True)
-	thenBlock.NewBr(endBlock)
+	cg.currentBlock.NewBr(mergeBlock)
+	// Else branch.
 	cg.currentBlock = elseBlock
 	elseVal := cg.genExpr(i.False)
-	elseBlock.NewBr(endBlock)
-	cg.currentBlock = endBlock
-	return endBlock.NewPhi(ir.NewIncoming(thenVal, thenBlock), ir.NewIncoming(elseVal, elseBlock))
+	cg.currentBlock.NewBr(mergeBlock)
+	// Merge.
+	cg.currentBlock = mergeBlock
+	phi := mergeBlock.NewPhi(
+		ir.NewIncoming(thenVal, thenBlock),
+		ir.NewIncoming(elseVal, elseBlock),
+	)
+	return phi
 }
 
 func (cg *CodeGenerator) genWhile(w *parser.While) value.Value {
@@ -320,7 +561,7 @@ func (cg *CodeGenerator) genWhile(w *parser.While) value.Value {
 	condBlock.NewCondBr(isTrue, bodyBlock, endBlock)
 	cg.currentBlock = bodyBlock
 	cg.genExpr(w.Body)
-	bodyBlock.NewBr(condBlock)
+	cg.currentBlock.NewBr(condBlock)
 	cg.currentBlock = endBlock
 	return constant.NewInt(types.I32, 0)
 }
@@ -362,6 +603,7 @@ func (cg *CodeGenerator) genUnaryOp(u *parser.UnaryOperation) value.Value {
 		icmp := cg.currentBlock.NewICmp(enum.IPredEQ, right, constant.NewInt(types.I32, 0))
 		return cg.currentBlock.NewZExt(icmp, types.I32)
 	case "isvoid":
+		// A proper implementation would test for null.
 		return constant.NewInt(types.I32, 0)
 	default:
 		fmt.Printf("Unknown unary operator %q\n", u.Operator)
@@ -375,12 +617,30 @@ func (cg *CodeGenerator) genLet(l *parser.Let) value.Value {
 	for k, v := range oldEnv {
 		cg.variableEnv[k] = v
 	}
-	for _, attr := range l.Assignments {
-		alloca := cg.currentBlock.NewAlloca(types.I32)
-		cg.variableEnv[attr.Ident] = alloca
-		var initVal value.Value = constant.NewInt(types.I32, 0)
-		if attr.Init != nil {
-    		initVal = cg.genExpr(attr.Init)
+	for _, assignment := range l.Assignments {
+		fmt.Printf("Let assignment: %s : %s\n", assignment.Ident, assignment.Type)
+		var varType types.Type
+		switch assignment.Type {
+		case "Int":
+			varType = types.I32
+		case "String":
+			varType = types.NewPointer(types.I8)
+		default:
+			varType = types.I32
+		}
+		alloca := cg.currentBlock.NewAlloca(varType)
+		cg.variableEnv[assignment.Ident] = alloca
+		var initVal value.Value
+		if assignment.Init != nil {
+			initVal = cg.genExpr(assignment.Init)
+		} else {
+			if varType.Equal(types.I32) {
+				initVal = constant.NewInt(types.I32, 0)
+			} else if varType.Equal(types.NewPointer(types.I8)) {
+				initVal = constant.NewNull(types.NewPointer(types.I8))
+			} else {
+				initVal = constant.NewInt(types.I32, 0)
+			}
 		}
 		cg.currentBlock.NewStore(initVal, alloca)
 	}
@@ -390,7 +650,8 @@ func (cg *CodeGenerator) genLet(l *parser.Let) value.Value {
 }
 
 func (cg *CodeGenerator) genCase(c *parser.Case) value.Value {
-	exprVal := cg.genExpr(c.Expr)
+	// Minimal: pick the first branch.
+	_ = cg.genExpr(c.Expr) // discard
 	if len(c.TypeActions) == 0 {
 		fmt.Println("Case with no branches => returning 0.")
 		return constant.NewInt(types.I32, 0)
@@ -402,86 +663,141 @@ func (cg *CodeGenerator) genCase(c *parser.Case) value.Value {
 	for k, v := range oldEnv {
 		cg.variableEnv[k] = v
 	}
-	alloca := cg.currentBlock.NewAlloca(types.I32)
-	cg.currentBlock.NewStore(exprVal, alloca)
-	cg.variableEnv[firstAction.Ident] = alloca
+	dummy := cg.currentBlock.NewAlloca(types.I32)
+	cg.variableEnv[firstAction.Ident] = dummy
 	result := cg.genExpr(firstAction.Expr)
 	cg.variableEnv = oldEnv
 	return result
 }
 
 // --------------------------------------------------------------------------
-// I/O Call Implementations
+// I/O Helpers (printing)
 // --------------------------------------------------------------------------
 
-// genCallPrintString generates the IR to print a string.
-// It computes the pointer to the global format string (e.g. "%s\n")
-// using getelementptr and then calls printf with that pointer and the
-// provided string pointer.
 func (cg *CodeGenerator) genCallPrintString(strPtr value.Value) value.Value {
 	zero := constant.NewInt(types.I32, 0)
-	// Compute: %fmt_ptr = getelementptr [4 x i8], [4 x i8]* @fmt_str_0, i32 0, i32 0
 	fmtPtr := cg.currentBlock.NewGetElementPtr(cg.fmtString.ContentType, cg.fmtString, zero, zero)
-	// Now call printf: %res = call i32 (i8*, ...) @printf(i8* %fmt_ptr, i8* %str_ptr)
-	callInst := cg.currentBlock.NewCall(cg.printfFunc, fmtPtr, strPtr)
-	return callInst
+	return cg.currentBlock.NewCall(cg.printfFunc, fmtPtr, strPtr)
 }
 
-// genCallPrintInt is analogous for integers.
 func (cg *CodeGenerator) genCallPrintInt(intVal value.Value) value.Value {
 	zero := constant.NewInt(types.I32, 0)
 	fmtPtr := cg.currentBlock.NewGetElementPtr(cg.fmtInt.ContentType, cg.fmtInt, zero, zero)
-	callInst := cg.currentBlock.NewCall(cg.printfFunc, fmtPtr, intVal)
-	return callInst
+	return cg.currentBlock.NewCall(cg.printfFunc, fmtPtr, intVal)
 }
 
 // --------------------------------------------------------------------------
-// MethodCall and FunctionCall Dispatch
+// I/O Helpers (reading)
 // --------------------------------------------------------------------------
 
-func (cg *CodeGenerator) genMethodCall(mc *parser.MethodCall) value.Value {
-	// Evaluate the object (ignored in this minimal implementation).
-	_ = cg.genExpr(mc.Object)
-	name := mc.Method.Ident
-	params := mc.Method.Params
+func (cg *CodeGenerator) genCallInString() value.Value {
+	// Allocate [1024 x i8] on the stack.
+	bufAlloca := cg.currentBlock.NewAlloca(types.NewArray(1024, types.I8))
+	zero := constant.NewInt(types.I32, 0)
+	ptr := cg.currentBlock.NewGetElementPtr(bufAlloca.ElemType, bufAlloca, zero, zero)
+	fmtPtr := cg.currentBlock.NewGetElementPtr(cg.fmtStringIn.ContentType, cg.fmtStringIn, zero, zero)
+	cg.currentBlock.NewCall(cg.scanfFunc, fmtPtr, ptr)
+	// Convert pointer to i32.
+	ptrAsInt := cg.currentBlock.NewPtrToInt(ptr, types.I32)
+	return ptrAsInt
+}
 
-	switch name {
+func (cg *CodeGenerator) genCallInInt() value.Value {
+	allocaI32 := cg.currentBlock.NewAlloca(types.I32)
+	zero := constant.NewInt(types.I32, 0)
+	fmtPtr := cg.currentBlock.NewGetElementPtr(cg.fmtIntIn.ContentType, cg.fmtIntIn, zero, zero)
+	cg.currentBlock.NewCall(cg.scanfFunc, fmtPtr, allocaI32)
+	loadedVal := cg.currentBlock.NewLoad(types.I32, allocaI32)
+	return loadedVal
+}
+
+// --------------------------------------------------------------------------
+// MethodCall and FunctionCall
+// --------------------------------------------------------------------------
+
+// genMethodCall:
+//  - Evaluates the receiver and passes it as the first argument.
+//  - For built-in String methods (length, concat, substr), uses our defined functions.
+func (cg *CodeGenerator) genMethodCall(mc *parser.MethodCall) value.Value {
+	// Evaluate the receiver.
+	var receiver value.Value
+	if mc.Object != nil {
+		receiver = cg.genExpr(mc.Object)
+	} else {
+		// If no receiver is provided, default to "self" (not fully implemented).
+		receiver = constant.NewInt(types.I32, 0)
+	}
+	// Evaluate method arguments.
+	var args []value.Value
+	// Pass the receiver as the first (implicit) parameter.
+	args = append(args, receiver)
+	for _, p := range mc.Method.Params {
+		args = append(args, cg.genExpr(p))
+	}
+	name := mc.Method.Ident
+	var calleeName string
+	// For built-in String methods, force the callee name.
+	if name == "length" || name == "concat" || name == "substr" {
+		calleeName = "String_" + name
+	} else {
+		// For other methods, if not already qualified, prefix with current class.
+		if cg.currentClass != "" && !strings.Contains(name, "_") {
+			calleeName = fmt.Sprintf("%s_%s", cg.currentClass, name)
+		} else {
+			calleeName = name
+		}
+	}
+	fmt.Println("calleeName: ", calleeName)
+	callee := findFuncByName(cg.module, calleeName)
+	if callee == nil {
+		fmt.Printf("Error: method %s not found\n", calleeName)
+		return constant.NewInt(types.I32, 0)
+	}
+	return cg.currentBlock.NewCall(callee, args...)
+}
+
+// genFunctionCall:
+// In COOL a bare call like out_int(...) is shorthand for self.out_int(...).
+func (cg *CodeGenerator) genFunctionCall(fc *parser.FunctionCall) value.Value {
+	// Check for built-in I/O functions.
+	switch fc.Ident {
 	case "out_string":
-		if len(params) < 1 {
+		if len(fc.Params) < 1 {
 			fmt.Println("Warning: out_string with no params!")
 			return constant.NewInt(types.I32, 0)
 		}
-		// Compute the string pointer.
-		strVal := cg.genExpr(params[0])
-		// **This is the key call:** generate:
-		// %fmt_ptr = getelementptr ... and %res = call i32 @printf(...)
-		return cg.genCallPrintString(strVal)
+		return cg.genCallPrintString(cg.genExpr(fc.Params[0]))
 	case "out_int":
-		if len(params) < 1 {
+		if len(fc.Params) < 1 {
 			fmt.Println("Warning: out_int with no params!")
 			return constant.NewInt(types.I32, 0)
 		}
-		intVal := cg.genExpr(params[0])
-		return cg.genCallPrintInt(intVal)
+		return cg.genCallPrintInt(cg.genExpr(fc.Params[0]))
 	case "in_string":
-		fmt.Println("in_string not implemented; returning 0")
-		return constant.NewInt(types.I32, 0)
+		return cg.genCallInString()
 	case "in_int":
-		fmt.Println("in_int not implemented; returning 0")
+		return cg.genCallInInt()
+	}
+	var args []value.Value
+	for _, p := range fc.Params {
+		args = append(args, cg.genExpr(p))
+	}
+	// If inside a class, prefix the function name with currentClass unless already qualified.
+	calleeName := fc.Ident
+	if cg.currentClass != "" && !strings.HasPrefix(fc.Ident, cg.currentClass+"_") {
+		calleeName = fmt.Sprintf("%s_%s", cg.currentClass, fc.Ident)
+	}
+	callee := findFuncByName(cg.module, calleeName)
+	if callee == nil {
+		fmt.Println("calleeName: ", calleeName)
+		fmt.Printf("Error: function %s not found\n", calleeName)
 		return constant.NewInt(types.I32, 0)
 	}
-
-	fmt.Printf("MethodCall %s => placeholder\n", name)
-	for _, p := range params {
-		_ = cg.genExpr(p)
-	}
-	return constant.NewInt(types.I32, 0)
+	return cg.currentBlock.NewCall(callee, args...)
 }
 
-func (cg *CodeGenerator) genFunctionCall(fc *parser.FunctionCall) value.Value {
-	fmt.Printf("FunctionCall %s => placeholder\n", fc.Ident)
-	for _, p := range fc.Params {
-		_ = cg.genExpr(p)
-	}
-	return constant.NewInt(types.I32, 0)
+func (cg *CodeGenerator) newUniqueName(prefix string) string {
+	name := fmt.Sprintf("%s_%d", prefix, cg.counter)
+	cg.counter++
+	return name
 }
