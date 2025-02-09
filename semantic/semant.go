@@ -68,7 +68,8 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 		parentOf: make(map[string]string),
 	}
 
-	// 1) Create builtin classes
+	// 1) Create builtin classes.
+	// In COOL the basic classes all exist in the system.
 	builtins := []string{"Object", "Int", "Bool", "String", "IO"}
 	for _, b := range builtins {
 		_ = sa.global.Add(b, &SymbolEntry{
@@ -76,11 +77,18 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 			Type: b,
 		})
 	}
+	// Set up the inheritance for built-in classes.
+	// In COOL, every type (except Object) inherits from Object.
+	sa.parentOf["Int"] = "Object"
+	sa.parentOf["Bool"] = "Object"
+	sa.parentOf["IO"] = "Object"
+	// Note: String is a basic class and should not be redefined.
+	// Object is the root; no parent needed.
 
-	// 2) Add IO methods to the global table
+	// 2) Add IO methods to the global table.
 	sa.addIOMethods()
 
-	// 3) Add built-in String methods
+	// 3) Add built-in String methods.
 	sa.addStringMethods()
 
 	return sa
@@ -202,32 +210,35 @@ func (sa *SemanticAnalyzer) verbosef(context, format string, args ...interface{}
 	sa.errors = append(sa.errors, prefix+msg)
 }
 
-
 func (sa *SemanticAnalyzer) Analyze(program *parser.Program) {
+	// First pass: register all class names.
 	sa.buildClassSymbols(program)
+	// Then register attributes and methods.
 	sa.buildFeatures(program)
+	// Finally, type-check the bodies.
 	sa.typeCheck(program)
 }
 
 // --------------------------------------------------------
 //          1) BUILD CLASS SYMBOLS
 // --------------------------------------------------------
+// To avoid ordering issues we do two passes:
+//   (a) register all classes (by name) in the global table,
+//   (b) then set up inheritance (and check that parent names exist).
 func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
+	// First pass: register all classes.
 	for _, classNode := range prog.Classes {
 		className := classNode.Name
-
-		// Check for redefinition of a basic class.
-		// It is not allowed to redefine String (or any built-in).
+		// Disallow redefinition of basic classes.
 		if className == "String" {
 			sa.verbosef("buildClassSymbols", "Redefinition of basic class String is not allowed")
 			continue
 		}
-
+		// Do not worry about inheritance here.
 		if _, exists := sa.global.Lookup(className); exists {
 			sa.verbosef("buildClassSymbols", "class %q is already defined", className)
 			continue
 		}
-
 		err := sa.global.Add(className, &SymbolEntry{
 			Name: className,
 			Type: className,
@@ -235,7 +246,16 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 		if err != nil {
 			sa.verbosef("buildClassSymbols", err.Error())
 		}
+	}
 
+	// Second pass: set default inheritance and check parent classes.
+	for _, classNode := range prog.Classes {
+		className := classNode.Name
+		// Default inheritance: if no parent is specified and this is not Object,
+		// then inherit from Object.
+		if className != "Object" && classNode.Inherits == "" {
+			classNode.Inherits = "Object"
+		}
 		if classNode.Inherits != "" {
 			// It is an error to inherit from the basic class String.
 			if classNode.Inherits == "String" {
@@ -245,6 +265,9 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 			} else {
 				sa.parentOf[className] = classNode.Inherits
 			}
+		} else if className != "Object" {
+			// Implicit inheritance from Object.
+			sa.parentOf[className] = "Object"
 		}
 	}
 }
@@ -252,6 +275,8 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 // --------------------------------------------------------
 //          2) BUILD FEATURES
 // --------------------------------------------------------
+// Register each class’s attributes and methods in a first pass so that
+// later method calls (even from subclasses) can find inherited methods.
 func (sa *SemanticAnalyzer) buildFeatures(prog *parser.Program) {
 	for _, classNode := range prog.Classes {
 		// If the class was not successfully registered, skip processing its features.
@@ -259,6 +284,7 @@ func (sa *SemanticAnalyzer) buildFeatures(prog *parser.Program) {
 		if !ok {
 			continue
 		}
+		// We use a temporary scope here (its only effect is to register methods globally).
 		classScope := NewSymbolTable(sa.global)
 
 		for _, feat := range classNode.Features {
@@ -291,7 +317,7 @@ func (sa *SemanticAnalyzer) registerAttribute(className string, attr *parser.Att
 }
 
 func (sa *SemanticAnalyzer) registerMethod(className string, method *parser.Method, scope *SymbolTable) {
-	// Accept SELF_TYPE as return type
+	// Accept SELF_TYPE as return type.
 	if method.Type != "SELF_TYPE" {
 		if _, ok := sa.global.Lookup(method.Type); !ok {
 			sa.verbosef("registerMethod",
@@ -329,7 +355,7 @@ func (sa *SemanticAnalyzer) registerMethod(className string, method *parser.Meth
 		ReturnType: method.Type,
 	}
 
-	// 1) Add to the class' local scope
+	// 1) Add to the class’ local scope.
 	err := scope.Add(method.Ident, &SymbolEntry{
 		Name:   method.Ident,
 		Type:   method.Type,
@@ -339,15 +365,15 @@ func (sa *SemanticAnalyzer) registerMethod(className string, method *parser.Meth
 		sa.verbosef("registerMethod", "in class %s: %v", className, err)
 	}
 
-	// 2) Also add to the global table, so method dispatch can find it
-	//    e.g. "CellularAutomaton.init"
+	// 2) Also add to the global table, so method dispatch can find it,
+	//    e.g. "Foo.init"
 	methodKey := className + "." + method.Ident
 	if gerr := sa.global.Add(methodKey, &SymbolEntry{
 		Name:   method.Ident,
 		Type:   method.Type,
 		Method: signature,
 	}); gerr != nil {
-		// If there's a conflict, let's just log it
+		// If there's a conflict, log it.
 		sa.verbosef("registerMethod",
 			"in class %s: method %q could not be globally registered: %v",
 			className, method.Ident, gerr)
@@ -357,11 +383,22 @@ func (sa *SemanticAnalyzer) registerMethod(className string, method *parser.Meth
 // --------------------------------------------------------
 //          3) TYPE CHECK
 // --------------------------------------------------------
+// When type–checking a class we build a symbol table that not only
+// contains the class’s own features but also those inherited from its ancestors.
 func (sa *SemanticAnalyzer) typeCheck(prog *parser.Program) {
+	// Build a map from class name to class AST node.
+	classesByName := make(map[string]*parser.Class)
 	for _, classNode := range prog.Classes {
-		classScope := NewSymbolTable(sa.global)
+		classesByName[classNode.Name] = classNode
+	}
 
-		// Add features (attributes / methods) to scope
+	for _, classNode := range prog.Classes {
+		// Build an environment with inherited attributes.
+		inheritedEnv := sa.buildInheritedAttributes(classNode.Name, classesByName)
+		// Create the class scope on top of the inherited environment.
+		classScope := NewSymbolTable(inheritedEnv)
+
+		// Add the current class’s features.
 		for _, feat := range classNode.Features {
 			switch f := feat.(type) {
 			case *parser.Attribute:
@@ -387,18 +424,17 @@ func (sa *SemanticAnalyzer) typeCheck(prog *parser.Program) {
 			}
 		}
 
-		// Now type-check the feature bodies
+		// Type-check each feature body.
 		for _, feat := range classNode.Features {
 			switch f := feat.(type) {
 			case *parser.Attribute:
 				if f.Init != nil {
 					initType := sa.getExprType(f.Init, classScope, classNode.Name)
-					// If attribute is declared SELF_TYPE, interpret that as classNode.Name
+					// Expand SELF_TYPE to current class.
 					declared := f.Type
 					if declared == "SELF_TYPE" {
 						declared = classNode.Name
 					}
-					// Similarly if initType is SELF_TYPE, interpret as current class
 					if initType == "SELF_TYPE" {
 						initType = classNode.Name
 					}
@@ -426,20 +462,16 @@ func (sa *SemanticAnalyzer) typeCheckMethod(m *parser.Method, classScope *Symbol
 
 	bodyType := sa.getExprType(m.Body, methodScope, className)
 
-	// If the body evaluates to SELF_TYPE, treat it as the current class
+	// Expand SELF_TYPE.
 	if bodyType == "SELF_TYPE" {
 		bodyType = className
 	}
-	// If the method is declared SELF_TYPE, treat it also as the current class
 	declaredType := m.Type
 	if declaredType == "SELF_TYPE" {
 		declaredType = className
 	}
 
-	if !sa.isTypeConformant(bodyType, declaredType) && !sa.isTypeConformant(declaredType, bodyType) {
-		fmt.Println("Type check failed")
-		fmt.Println(bodyType)
-		fmt.Println(declaredType)
+	if !sa.isTypeConformant(bodyType, declaredType) {
 		sa.verbosef("typeCheckMethod",
 			"in class %s: method %q returns type %q but declared %q",
 			className, m.Ident, bodyType, m.Type)
@@ -461,7 +493,7 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 		return "String"
 
 	case *parser.Self:
-		// 'self' has static type SELF_TYPE in COOL
+		// 'self' has static type SELF_TYPE in COOL.
 		return "SELF_TYPE"
 
 	case *parser.Ident:
@@ -482,12 +514,10 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 				"assignment to undeclared identifier %q", leftName)
 			return "Object"
 		}
-		// If the left side is declared SELF_TYPE, interpret as current class
 		leftDeclared := entry.Type
 		if leftDeclared == "SELF_TYPE" {
 			leftDeclared = currentClass
 		}
-		// If the right side is SELF_TYPE, interpret as current class
 		expandedRight := rightType
 		if expandedRight == "SELF_TYPE" {
 			expandedRight = currentClass
@@ -497,7 +527,6 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 				"cannot assign type %q to identifier %q of type %q",
 				rightType, leftName, entry.Type)
 		}
-		// Return the declared type of the variable
 		return entry.Type
 
 	case *parser.If:
@@ -508,10 +537,8 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 		}
 		trueType := sa.getExprType(e.True, scope, currentClass)
 		falseType := sa.getExprType(e.False, scope, currentClass)
-		if trueType == falseType {
-			return trueType
-		}
-		return "Object"
+		// Use join (least upper bound) of branch types.
+		return sa.join(trueType, falseType)
 
 	case *parser.While:
 		condType := sa.getExprType(e.Condition, scope, currentClass)
@@ -575,7 +602,6 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 	case *parser.BinaryOperation:
 		leftT := sa.getExprType(e.Left, scope, currentClass)
 		rightT := sa.getExprType(e.Right, scope, currentClass)
-		// Expand SELF_TYPE
 		if leftT == "SELF_TYPE" {
 			leftT = currentClass
 		}
@@ -586,14 +612,16 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 		case "+", "-", "*", "/":
 			if leftT != "Int" || rightT != "Int" {
 				sa.verbosef("getExprType(binaryOp)",
-					"arithmetic %q on non-Int types %q and %q",
+					"arithmetic operator %q applied to non-Int types %q and %q",
 					e.Operator, leftT, rightT)
 			}
 			return "Int"
 		case "<", "<=", "=":
+			// Use join to compute common supertype if needed.
+			// (For simplicity we expect the types to be comparable.)
 			if leftT != rightT {
 				sa.verbosef("getExprType(binaryOp)",
-					"comparison %q between incompatible types %q and %q",
+					"comparison operator %q between incompatible types %q and %q",
 					e.Operator, leftT, rightT)
 			}
 			return "Bool"
@@ -630,28 +658,44 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 		}
 
 	case *parser.MethodCall:
-		// 1) get static type of the object
+		// 1) Get the static type of the object.
 		objType := sa.getExprType(e.Object, scope, currentClass)
-		// Expand SELF_TYPE => currentClass for method lookup
 		receiverType := objType
 		if receiverType == "SELF_TYPE" {
 			receiverType = currentClass
 		}
 
-		// 2) find the method in that class or its parents
-		entry := sa.lookupMethod(receiverType, e.Method.Ident)
+		// 2) Handle explicit static dispatch (a@T.f()).
+		var lookupType string
+		if e.TargetType != "" {
+			lookupType = e.TargetType
+			actualType := sa.getExprType(e.Object, scope, currentClass)
+			if actualType == "SELF_TYPE" {
+				actualType = currentClass
+			}
+			if !sa.isTypeConformant(actualType, lookupType) {
+				sa.verbosef("getExprType(methodCall)",
+					"object type %q does not conform to static dispatch type %q",
+					actualType, lookupType)
+			}
+		} else {
+			lookupType = receiverType
+		}
+
+		// 3) Look up the method in the class (or its ancestors).
+		entry := sa.lookupMethod(lookupType, e.Method.Ident)
 		if entry == nil || entry.Method == nil {
-			// If not found, we type-check the params anyway, but default to "Object"
 			sa.verbosef("getExprType(methodCall)",
-				"no method %q found in class %q or ancestors",
-				e.Method.Ident, receiverType)
+				"no method %q found in class %q or its ancestors",
+				e.Method.Ident, lookupType)
+			// Type-check parameters anyway.
 			for _, paramExpr := range e.Method.Params {
 				_ = sa.getExprType(paramExpr, scope, currentClass)
 			}
 			return "Object"
 		}
 
-		// 3) Check param count and types
+		// 4) Check parameter count and types.
 		if len(e.Method.Params) != len(entry.Method.ParamTypes) {
 			sa.verbosef("getExprType(methodCall)",
 				"method %q expects %d params, got %d",
@@ -664,74 +708,33 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 				}
 				declared := entry.Method.ParamTypes[i]
 				if declared == "SELF_TYPE" {
-					declared = receiverType
+					declared = lookupType
 				}
 				if !sa.isTypeConformant(pt, declared) {
 					sa.verbosef("getExprType(methodCall)",
-						"method %q param #%d type mismatch: got %q, want %q",
-						e.Method.Ident, i, pt, entry.Method.ParamTypes[i])
+						"method %q param #%d type mismatch: got %q, expected %q",
+						e.Method.Ident, i, pt, declared)
 				}
 			}
 		}
 
-		// 4) If method's return type is SELF_TYPE, the call's type is
-		// the static type of the receiver (which might be "SELF_TYPE" if the object was "self").
+		// 5) Determine the return type.
 		if entry.Method.ReturnType == "SELF_TYPE" {
-			return objType // Keep it "SELF_TYPE" if that's what the caller has
+			return objType
 		}
 		return entry.Method.ReturnType
 
 	case *parser.FunctionCall:
-		// E.g. out_string(...)
-		// Treat as self.out_string(...)
-		switch e.Ident {
-		case "out_string", "out_int", "in_string", "in_int":
-			syntheticMC := &parser.MethodCall{
-				Object: &parser.Self{},
-				TargetType: "",
-				Method: &parser.FunctionCall{
-					Ident:  e.Ident,
-					Params: e.Params,
-				},
-			}
-			return sa.getExprType(syntheticMC, scope, currentClass)
-		default:
-			name := e.Ident
-			entry, ok := scope.Lookup(name)
-			if !ok || entry.Method == nil {
-				sa.verbosef("getExprType(functionCall)",
-					"call to undeclared function %q", name)
-				for _, p := range e.Params {
-					_ = sa.getExprType(p, scope, currentClass)
-				}
-				return "Object"
-			}
-			if len(e.Params) != len(entry.Method.ParamTypes) {
-				sa.verbosef("getExprType(functionCall)",
-					"function %q expects %d args, got %d",
-					name, len(entry.Method.ParamTypes), len(e.Params))
-			} else {
-				for i, param := range e.Params {
-					pt := sa.getExprType(param, scope, currentClass)
-					if pt == "SELF_TYPE" {
-						pt = currentClass
-					}
-					declared := entry.Method.ParamTypes[i]
-					if declared == "SELF_TYPE" {
-						declared = currentClass
-					}
-					if !sa.isTypeConformant(pt, declared) {
-						sa.verbosef("getExprType(functionCall)",
-							"function %q param #%d has type %q, expected %q",
-							name, i, pt, entry.Method.ParamTypes[i])
-					}
-				}
-			}
-			if entry.Method.ReturnType == "SELF_TYPE" {
-				return "SELF_TYPE"
-			}
-			return entry.Method.ReturnType
+		// In COOL all function calls are really method calls on 'self'.
+		syntheticMC := &parser.MethodCall{
+			Object:     &parser.Self{},
+			TargetType: "",
+			Method: &parser.FunctionCall{
+				Ident:  e.Ident,
+				Params: e.Params,
+			},
 		}
+		return sa.getExprType(syntheticMC, scope, currentClass)
 
 	case *parser.Case:
 		_ = sa.getExprType(e.Expr, scope, currentClass)
@@ -743,14 +746,13 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 				Type: ta.Type,
 			})
 			branchType := sa.getExprType(ta.Expr, branchScope, currentClass)
+			if branchType == "SELF_TYPE" {
+				branchType = currentClass
+			}
 			if i == 0 {
 				resultType = branchType
-			} else if resultType != branchType {
-				// Proper COOL does a least-common-ancestor.
-				// For simplicity, we degrade to Object if they differ.
-				if resultType != branchType {
-					resultType = "Object"
-				}
+			} else {
+				resultType = sa.join(resultType, branchType)
 			}
 		}
 		if resultType == "" {
@@ -787,7 +789,7 @@ func (sa *SemanticAnalyzer) lookupMethod(className, methodName string) *SymbolEn
 //          isTypeConformant
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) isTypeConformant(actual, expected string) bool {
-	// Caller should expand SELF_TYPE => concrete class name beforehand
+	// Both actual and expected should be expanded (i.e. SELF_TYPE replaced)
 	if actual == expected {
 		return true
 	}
@@ -803,4 +805,90 @@ func (sa *SemanticAnalyzer) isTypeConformant(actual, expected string) bool {
 		current = p
 	}
 	return false
+}
+
+// --------------------------------------------------------
+//          join: compute least upper bound of two types
+// --------------------------------------------------------
+func (sa *SemanticAnalyzer) join(type1, type2 string) string {
+	// If either is SELF_TYPE, assume it’s already been expanded by callers.
+	if type1 == type2 {
+		return type1
+	}
+	ancestors := make(map[string]bool)
+	for t := type1; ; {
+		ancestors[t] = true
+		if t == "Object" {
+			break
+		}
+		p, ok := sa.parentOf[t]
+		if !ok {
+			break
+		}
+		t = p
+	}
+	for t := type2; ; {
+		if ancestors[t] {
+			return t
+		}
+		if t == "Object" {
+			break
+		}
+		p, ok := sa.parentOf[t]
+		if !ok {
+			break
+		}
+		t = p
+	}
+	return "Object"
+}
+
+// --------------------------------------------------------
+//   buildInheritanceChain: return the chain from Object to the given class.
+// --------------------------------------------------------
+func (sa *SemanticAnalyzer) getInheritanceChain(className string) []string {
+	chain := []string{}
+	for curr := className; ; {
+		chain = append(chain, curr)
+		if curr == "Object" {
+			break
+		}
+		p, ok := sa.parentOf[curr]
+		if !ok {
+			break
+		}
+		curr = p
+	}
+	// Reverse the chain so that Object is first.
+	for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
+		chain[i], chain[j] = chain[j], chain[i]
+	}
+	return chain
+}
+
+// --------------------------------------------------------
+//   buildInheritedAttributes: build a symbol table containing all attributes
+//   declared in ancestor classes (but not the current class).
+// --------------------------------------------------------
+func (sa *SemanticAnalyzer) buildInheritedAttributes(className string, classesByName map[string]*parser.Class) *SymbolTable {
+	env := NewSymbolTable(nil)
+	chain := sa.getInheritanceChain(className)
+	// Exclude the last element (the current class).
+	for i := 0; i < len(chain)-1; i++ {
+		ancName := chain[i]
+		if ancClass, ok := classesByName[ancName]; ok {
+			for _, feat := range ancClass.Features {
+				if attr, ok := feat.(*parser.Attribute); ok {
+					// Do not override if already defined (subclasses may override later).
+					if _, exists := env.entries[attr.Ident]; !exists {
+						env.entries[attr.Ident] = &SymbolEntry{
+							Name: attr.Ident,
+							Type: attr.Type,
+						}
+					}
+				}
+			}
+		}
+	}
+	return env
 }

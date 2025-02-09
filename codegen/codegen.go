@@ -36,7 +36,7 @@ type DispatchEntry struct {
 // canonical pointer types, and (NEW) dispatch table information.
 //
 // IMPORTANT: User‐defined classes now have a “vtable pointer” as their first field.
-// Built‐in classes (Int, String, Bool, IO) are left unchanged.
+// Built‐in classes (Int, String, Bool, IO) are represented as objects with boxed values.
 type CodeGenerator struct {
 	module           *ir.Module
 	currentFunc      *ir.Func
@@ -78,6 +78,9 @@ type CodeGenerator struct {
 	stringStruct *types.StructType   // e.g. struct { i8* }
 	stringType   types.Type           // canonical pointer type for String objects (= pointer to stringStruct)
 	//
+	// For built–in Int and Bool we box the primitive value.
+	// Int is represented as struct { i32 } and Bool as struct { i1 }.
+	//
 	// Other canonical types (for classes) remain.
 	classPtrTypes map[string]types.Type // canonical pointer types for classes (keyed by class name)
 
@@ -85,7 +88,7 @@ type CodeGenerator struct {
 	// For each user-defined class we compute:
 	// - dispatchTableLayouts: the ordered list of methods (including inherited ones,
 	//   with overriding) for that class.
-	// - dispatchTables: a global vtable (constant array of i8* pointers) for that class.
+	// - dispatchTables: a global vtable (constant array of function pointers) for that class.
 	// - methodIndices: a map from "Class.Method" (where Class is a static type)
 	//   to the index in the dispatch table.
 	dispatchTableLayouts map[string][]DispatchEntry
@@ -136,6 +139,53 @@ func isBuiltIn(className string) bool {
 	return className == "Int" || className == "String" || className == "Bool" || className == "IO"
 }
 
+// contains is a helper to check whether a string is in a slice.
+func contains(slice []string, s string) bool {
+	for _, a := range slice {
+		if a == s {
+			return true
+		}
+	}
+	return false
+}
+
+// --------------------------------------------------------------------------
+// Helper functions for boxing/unboxing Int and Bool
+// --------------------------------------------------------------------------
+func (cg *CodeGenerator) boxInt(val value.Value) value.Value {
+	size := constant.NewInt(types.I64, cg.typeSize(cg.classTypes["Int"]))
+	mallocFn := findFuncByName(cg.module, "malloc")
+	rawPtr := cg.currentBlock.NewCall(mallocFn, size)
+	intObj := cg.currentBlock.NewBitCast(rawPtr, cg.getClassPtrType("Int"))
+	fieldPtr := cg.currentBlock.NewGetElementPtr(cg.classTypes["Int"], intObj,
+		constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
+	cg.currentBlock.NewStore(val, fieldPtr)
+	return intObj
+}
+
+func (cg *CodeGenerator) unboxInt(obj value.Value) value.Value {
+	fieldPtr := cg.currentBlock.NewGetElementPtr(cg.classTypes["Int"], obj,
+		constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
+	return cg.currentBlock.NewLoad(types.I32, fieldPtr)
+}
+
+func (cg *CodeGenerator) boxBool(val value.Value) value.Value {
+	size := constant.NewInt(types.I64, cg.typeSize(cg.classTypes["Bool"]))
+	mallocFn := findFuncByName(cg.module, "malloc")
+	rawPtr := cg.currentBlock.NewCall(mallocFn, size)
+	boolObj := cg.currentBlock.NewBitCast(rawPtr, cg.getClassPtrType("Bool"))
+	fieldPtr := cg.currentBlock.NewGetElementPtr(cg.classTypes["Bool"], boolObj,
+		constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
+	cg.currentBlock.NewStore(val, fieldPtr)
+	return boolObj
+}
+
+func (cg *CodeGenerator) unboxBool(obj value.Value) value.Value {
+	fieldPtr := cg.currentBlock.NewGetElementPtr(cg.classTypes["Bool"], obj,
+		constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
+	return cg.currentBlock.NewLoad(types.I1, fieldPtr)
+}
+
 // --------------------------------------------------------------------------
 // Entry Point: CodegenProgram
 // --------------------------------------------------------------------------
@@ -157,33 +207,50 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
 	cg.stringType = types.NewPointer(cg.stringStruct)
 	cg.classPtrTypes = make(map[string]types.Type)
 
-	// Register built-in class "IO".
-	if _, ok := cg.classTypes["IO"]; !ok {
-		cg.classTypes["IO"] = types.NewStruct() // empty struct for IO
+	// Predeclare built-in classes.
+	// Represent Int as { i32 } and Bool as { i1 }.
+	builtIns := []string{"Object", "Int", "Bool", "String", "IO"}
+	for _, cname := range builtIns {
+		switch cname {
+		case "String":
+			cg.classTypes[cname] = cg.stringStruct
+		case "Int":
+			cg.classTypes[cname] = types.NewStruct(types.I32)
+		case "Bool":
+			cg.classTypes[cname] = types.NewStruct(types.I1)
+		default:
+			cg.classTypes[cname] = types.NewStruct()
+		}
 	}
 
-	// Declare external I/O functions.
+	// For each user–defined class, initially create an opaque struct.
+	for _, classNode := range prog.Classes {
+		if !contains(builtIns, classNode.Name) {
+			opaqStruct := types.StructType{Opaque: true}
+			cg.classTypes[classNode.Name] = &opaqStruct
+		}
+	}
+
 	cg.declareExternalIO()
-	// Declare external malloc.
 	cg.declareMalloc()
-	// Define built‐in string methods.
 	cg.defineStringLength()
 	cg.defineStringConcat()
 	cg.defineStringSubstr()
 
-	// Create a main function.
 	mainFn := cg.module.NewFunc("main", types.I32)
 	cg.currentFunc = mainFn
 	cg.currentBlock = mainFn.NewBlock("entry")
 
-	// NEW PASS ORDER:
-	// 1. Create class types.
-	// 2. Declare all methods (but do not generate bodies yet).
-	// 3. Build dispatch tables.
-	// 4. Generate method bodies.
+	// 1. Build a map from class names to AST nodes.
+	classMap := make(map[string]*parser.Class)
 	for _, classNode := range prog.Classes {
-		cg.createClassType(classNode)
+		classMap[classNode.Name] = classNode
 	}
+	// 2. Create class types (filling in inherited attributes as needed).
+	for _, classNode := range prog.Classes {
+		cg.createClassType(classNode, classMap)
+	}
+	// 3. Declare all methods (but do not generate bodies yet).
 	for _, classNode := range prog.Classes {
 		for _, feat := range classNode.Features {
 			if method, ok := feat.(*parser.Method); ok {
@@ -191,13 +258,11 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
 			}
 		}
 	}
-	classMap := make(map[string]*parser.Class)
-	for _, classNode := range prog.Classes {
-		classMap[classNode.Name] = classNode
-	}
+	// 4. Build dispatch tables.
 	for _, classNode := range prog.Classes {
 		cg.buildDispatchTable(classNode, classMap)
 	}
+	// 5. Generate method bodies.
 	for _, classNode := range prog.Classes {
 		cg.generateMethodBodies(classNode)
 	}
@@ -384,7 +449,12 @@ func (cg *CodeGenerator) defineStringSubstr() {
 // --------------------------------------------------------------------------
 // Class, Method, and Expression Generation
 // --------------------------------------------------------------------------
-func (cg *CodeGenerator) createClassType(classNode *parser.Class) types.Type {
+
+// createClassType builds the LLVM struct type for a class.
+// For built–in classes we simply generate a struct from the class’s own features.
+// For user–defined classes we merge inherited attributes (if any) and then
+// mark the type as non-opaque so that it has a known size.
+func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[string]*parser.Class) types.Type {
 	if isBuiltIn(classNode.Name) {
 		var fieldTypes []types.Type
 		index := 0
@@ -393,17 +463,17 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class) types.Type {
 				var attrType types.Type
 				switch attr.Type {
 				case "Int":
-					attrType = types.I32
+					attrType = cg.getClassPtrType("Int")
 				case "String":
 					attrType = cg.stringType
 				case "Bool":
-					attrType = types.I1
+					attrType = cg.getClassPtrType("Bool")
 				default:
 					if _, exists := cg.classTypes[attr.Type]; exists {
 						attrType = cg.getClassPtrType(attr.Type)
 					} else {
 						fmt.Printf("Error: class type %s not found for attribute %s\n", attr.Type, attr.Ident)
-						attrType = types.I32
+						attrType = cg.getClassPtrType("Object")
 					}
 				}
 				fieldTypes = append(fieldTypes, attrType)
@@ -417,41 +487,91 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class) types.Type {
 		cg.classTypes[classNode.Name] = structType
 		return structType
 	} else {
-		// For user-defined classes, add a vtable pointer (of type i8**)
-		vtableType := types.NewPointer(types.NewPointer(types.I8))
-		fieldTypes := []types.Type{vtableType}
-		index := 1
+		var fieldTypes []types.Type
+		var index int
+		// The first field of every user–defined object is the vtable pointer.
+		commonSelfType := cg.getClassPtrType("Object")
+		commonMethodFuncType := types.NewFunc(commonSelfType, commonSelfType)
+		commonMethodFuncType.Variadic = true
+		vtableType := types.NewPointer(commonMethodFuncType)
+		if classNode.Inherits != "" {
+			if parentClass, found := classMap[classNode.Inherits]; found {
+				cg.createClassType(parentClass, classMap)
+			}
+			if parentStruct, ok := cg.classTypes[classNode.Inherits]; ok {
+				if ps, ok := parentStruct.(*types.StructType); ok {
+					if len(ps.Fields) == 0 {
+						fieldTypes = []types.Type{vtableType}
+						index = 1
+					} else {
+						fieldTypes = append([]types.Type{}, ps.Fields...)
+						index = len(ps.Fields)
+					}
+					for key, idxVal := range cg.attributeIndices {
+						if strings.HasPrefix(key, classNode.Inherits+".") {
+							attrName := key[len(classNode.Inherits)+1:]
+							childKey := fmt.Sprintf("%s.%s", classNode.Name, attrName)
+							cg.attributeIndices[childKey] = idxVal
+							cg.attributeTypeEnv[childKey] = cg.attributeTypeEnv[key]
+						}
+					}
+				} else {
+					fieldTypes = []types.Type{vtableType}
+					index = 1
+				}
+			} else {
+				fieldTypes = []types.Type{vtableType}
+				index = 1
+			}
+		} else {
+			fieldTypes = []types.Type{vtableType}
+			index = 1
+		}
 		for _, feat := range classNode.Features {
 			if attr, ok := feat.(*parser.Attribute); ok {
 				var attrType types.Type
 				switch attr.Type {
 				case "Int":
-					attrType = types.I32
+					attrType = cg.getClassPtrType("Int")
 				case "String":
 					attrType = cg.stringType
 				case "Bool":
-					attrType = types.I1
+					attrType = cg.getClassPtrType("Bool")
 				default:
 					if _, exists := cg.classTypes[attr.Type]; exists {
 						attrType = cg.getClassPtrType(attr.Type)
 					} else {
 						fmt.Printf("Error: class type %s not found for attribute %s\n", attr.Type, attr.Ident)
-						attrType = types.I32
+						attrType = cg.getClassPtrType("Object")
 					}
 				}
-				fieldTypes = append(fieldTypes, attrType)
-				key := fmt.Sprintf("%s.%s", classNode.Name, attr.Ident)
-				cg.attributeIndices[key] = index
-				cg.attributeTypeEnv[key] = attr.Type
-				index++
+				childKey := fmt.Sprintf("%s.%s", classNode.Name, attr.Ident)
+				if inheritedIndex, exists := cg.attributeIndices[childKey]; exists {
+					fieldTypes[inheritedIndex] = attrType
+					cg.attributeTypeEnv[childKey] = attr.Type
+				} else {
+					fieldTypes = append(fieldTypes, attrType)
+					cg.attributeIndices[childKey] = index
+					cg.attributeTypeEnv[childKey] = attr.Type
+					index++
+				}
 			}
 		}
-		structType := types.NewStruct(fieldTypes...)
-		cg.classTypes[classNode.Name] = structType
-		return structType
+		st, ok := cg.classTypes[classNode.Name].(*types.StructType)
+		if !ok {
+			st = types.NewStruct(fieldTypes...)
+			cg.classTypes[classNode.Name] = st
+		} else {
+			st.Fields = fieldTypes
+			st.Opaque = false
+		}
+		return st
 	}
 }
 
+// declareMethod creates a method with a uniform signature.
+// All methods (except "init") are declared with self parameter of type Object*
+// and all formal parameters and the return type are object pointers.
 func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) {
 	var retType types.Type
 	if method.Ident == "init" {
@@ -459,40 +579,42 @@ func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) 
 	} else {
 		switch method.Type {
 		case "Int":
-			retType = types.I32
+			retType = cg.getClassPtrType("Int")
 		case "String":
 			retType = cg.stringType
 		case "Bool":
-			retType = types.I1
+			retType = cg.getClassPtrType("Bool")
 		case "SELF_TYPE":
-			retType = cg.getClassPtrType(className)
+			retType = cg.getClassPtrType("Object")
 		default:
 			if _, exists := cg.classTypes[method.Type]; exists {
 				retType = cg.getClassPtrType(method.Type)
 			} else {
 				fmt.Printf("Unknown return type %q in method %q\n", method.Type, method.Ident)
-				retType = types.I32
+				retType = cg.getClassPtrType("Object")
 			}
 		}
 	}
 	var params []*ir.Param
-	selfType := cg.getClassPtrType(className)
+	selfType := cg.getClassPtrType("Object")
 	selfParam := ir.NewParam("self", selfType)
 	params = append(params, selfParam)
 	for _, fm := range method.Formals {
 		var paramType types.Type
 		switch fm.Type {
 		case "Int":
-			paramType = types.I32
+			paramType = cg.getClassPtrType("Int")
 		case "String":
 			paramType = cg.stringType
 		case "Bool":
-			paramType = types.I1
+			paramType = cg.getClassPtrType("Bool")
+		case "SELF_TYPE":
+			paramType = cg.getClassPtrType("Object")
 		default:
 			if _, exists := cg.classTypes[fm.Type]; exists {
 				paramType = cg.getClassPtrType(fm.Type)
 			} else {
-				paramType = types.I32
+				paramType = cg.getClassPtrType("Object")
 			}
 		}
 		params = append(params, ir.NewParam(fm.Ident, paramType))
@@ -501,6 +623,8 @@ func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) 
 	cg.module.NewFunc(fnName, retType, params...)
 }
 
+// generateMethodBody generates the body of a method.
+// We leave the self parameter in its universal type and perform bitcasts on–the–fly.
 func (cg *CodeGenerator) generateMethodBody(className string, method *parser.Method, fn *ir.Func) {
 	oldFunc := cg.currentFunc
 	oldBlock := cg.currentBlock
@@ -522,6 +646,7 @@ func (cg *CodeGenerator) generateMethodBody(className string, method *parser.Met
 			cg.variableTypeEnv[p.LocalName] = method.Formals[i-1].Type
 		}
 	}
+
 	retVal := cg.genExpr(method.Body)
 	if retVal.Type() != fn.Sig.RetType {
 		retVal = cg.currentBlock.NewBitCast(retVal, fn.Sig.RetType)
@@ -592,19 +717,24 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
 		cg.methodIndices[key] = i
 	}
 	methodCount := len(layout)
+	commonSelfType := cg.getClassPtrType("Object")
+	commonMethodFuncType := types.NewFunc(commonSelfType, commonSelfType)
+	commonMethodFuncType.Variadic = true
+	commonMethodType := types.NewPointer(commonMethodFuncType)
+
 	elems := make([]constant.Constant, methodCount)
 	for i, entry := range layout {
 		funcName := fmt.Sprintf("%s_%s", entry.Class, entry.Method)
 		fn := findFuncByName(cg.module, funcName)
 		if fn == nil {
 			fmt.Printf("Error: function %s not found for dispatch table of class %s\n", funcName, classNode.Name)
-			elems[i] = constant.NewNull(types.NewPointer(types.I8))
+			elems[i] = constant.NewNull(commonMethodType)
 		} else {
-			casted := constant.NewBitCast(fn, types.NewPointer(types.I8))
+			casted := constant.NewBitCast(fn, commonMethodType)
 			elems[i] = casted
 		}
 	}
-	arrayType := types.NewArray(uint64(methodCount), types.NewPointer(types.I8))
+	arrayType := types.NewArray(uint64(methodCount), commonMethodType)
 	arrayConst := constant.NewArray(arrayType, elems...)
 	globalName := fmt.Sprintf("vtable_%s", classNode.Name)
 	vtableGlobal := cg.module.NewGlobalDef(globalName, arrayConst)
@@ -618,12 +748,16 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
 func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 	switch n := node.(type) {
 	case *parser.IntConst:
-		return constant.NewInt(types.I32, int64(n.Value))
+		// Box the integer constant.
+		return cg.boxInt(constant.NewInt(types.I32, int64(n.Value)))
 	case *parser.BoolConst:
+		var b int64
 		if n.Value {
-			return constant.NewInt(types.I1, 1)
+			b = 1
+		} else {
+			b = 0
 		}
-		return constant.NewInt(types.I1, 0)
+		return cg.boxBool(constant.NewInt(types.I1, b))
 	case *parser.StringConst:
 		return cg.genStringConstantPtr(n.Value)
 	case *parser.Self:
@@ -643,15 +777,13 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 					fmt.Printf("Error: self not found in variableEnv\n")
 					return constant.NewNull(types.NewPointer(types.I32))
 				}
-				selfVal := cg.currentBlock.NewLoad(selfAlloca.ElemType, selfAlloca)
+				selfVal := cg.currentBlock.NewLoad(cg.getClassPtrType("Object"), selfAlloca)
+				specificSelf := cg.currentBlock.NewBitCast(selfVal, cg.getClassPtrType(cg.currentClass))
 				indexVal := constant.NewInt(types.I32, int64(index))
-				fieldPtr := cg.currentBlock.NewGetElementPtr(cg.classTypes[cg.currentClass], selfVal,
+				fieldPtr := cg.currentBlock.NewGetElementPtr(cg.classTypes[cg.currentClass], specificSelf,
 					constant.NewInt(types.I32, 0), indexVal)
 				return cg.currentBlock.NewLoad(fieldPtr.ElemType, fieldPtr)
 			}
-		}
-		if typ, found := cg.variableTypeEnv[n.Name]; found && typ == "String" {
-			return cg.genStringConstantPtr("")
 		}
 		fmt.Printf("IDENT %s not found, defaulting to null.\n", n.Name)
 		return constant.NewNull(types.NewPointer(types.I32))
@@ -667,9 +799,10 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 						fmt.Printf("Error: self not found for assignment\n")
 						return val
 					}
-					selfVal := cg.currentBlock.NewLoad(selfAlloca.ElemType, selfAlloca)
+					selfVal := cg.currentBlock.NewLoad(cg.getClassPtrType("Object"), selfAlloca)
+					specificSelf := cg.currentBlock.NewBitCast(selfVal, cg.getClassPtrType(cg.currentClass))
 					indexVal := constant.NewInt(types.I32, int64(index))
-					fieldPtr := cg.currentBlock.NewGetElementPtr(cg.classTypes[cg.currentClass], selfVal,
+					fieldPtr := cg.currentBlock.NewGetElementPtr(cg.classTypes[cg.currentClass], specificSelf,
 						constant.NewInt(types.I32, 0), indexVal)
 					cg.currentBlock.NewStore(val, fieldPtr)
 					return val
@@ -678,7 +811,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 			alloca = cg.currentBlock.NewAlloca(val.Type())
 			cg.variableEnv[n.Ident.Name] = alloca
 		}
-		if val.Type() != alloca.ElemType {
+		if !val.Type().Equal(alloca.ElemType) {
 			val = cg.currentBlock.NewBitCast(val, alloca.ElemType)
 		}
 		cg.currentBlock.NewStore(val, alloca)
@@ -691,7 +824,26 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 		return last
 	case *parser.If:
 		condVal := cg.genExpr(n.Condition)
-		isTrue := cg.currentBlock.NewICmp(enum.IPredNE, condVal, constant.NewInt(types.I32, 0))
+		// If condition is a Bool object, unbox it.
+		var cmpVal value.Value
+		if condVal.Type().Equal(cg.getClassPtrType("Bool")) {
+			cmpVal = cg.unboxBool(condVal)
+		} else if condVal.Type().Equal(types.I32) || condVal.Type().Equal(types.I1) {
+			cmpVal = condVal
+		} else if condVal.Type().(*types.PointerType) != nil {
+			cmpVal = condVal
+		} else {
+			cmpVal = condVal
+		}
+		// Determine a proper "zero" constant.
+		var zero value.Value
+		switch cmpVal.Type().(type) {
+		case *types.IntType:
+			zero = constant.NewInt(cmpVal.Type().(*types.IntType), 0)
+		default:
+			zero = constant.NewNull(types.NewPointer(cmpVal.Type()))
+		}
+		isTrue := cg.currentBlock.NewICmp(enum.IPredNE, cmpVal, zero)
 		thenBlock := cg.currentFunc.NewBlock(cg.newUniqueName("if_then"))
 		elseBlock := cg.currentFunc.NewBlock(cg.newUniqueName("if_else"))
 		mergeBlock := cg.currentFunc.NewBlock(cg.newUniqueName("if_end"))
@@ -715,7 +867,20 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 		cg.currentBlock.NewBr(condBlock)
 		cg.currentBlock = condBlock
 		condVal := cg.genExpr(n.Condition)
-		isTrue := condBlock.NewICmp(enum.IPredNE, condVal, constant.NewInt(types.I32, 0))
+		var cmpVal value.Value
+		if condVal.Type().Equal(cg.getClassPtrType("Bool")) {
+			cmpVal = cg.unboxBool(condVal)
+		} else {
+			cmpVal = condVal
+		}
+		var zero value.Value
+		switch cmpVal.Type().(type) {
+		case *types.IntType:
+			zero = constant.NewInt(cmpVal.Type().(*types.IntType), 0)
+		default:
+			zero = constant.NewNull(types.NewPointer(cmpVal.Type()))
+		}
+		isTrue := condBlock.NewICmp(enum.IPredNE, cmpVal, zero)
 		condBlock.NewCondBr(isTrue, bodyBlock, endBlock)
 		cg.currentBlock = bodyBlock
 		cg.genExpr(n.Body)
@@ -727,20 +892,52 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 		right := cg.genExpr(n.Right)
 		switch n.Operator {
 		case "+":
-			return cg.currentBlock.NewAdd(left, right)
+			// Unbox ints, add, then box the result.
+			leftVal := cg.unboxInt(left)
+			rightVal := cg.unboxInt(right)
+			sum := cg.currentBlock.NewAdd(leftVal, rightVal)
+			return cg.boxInt(sum)
 		case "-":
-			return cg.currentBlock.NewSub(left, right)
+			leftVal := cg.unboxInt(left)
+			rightVal := cg.unboxInt(right)
+			diff := cg.currentBlock.NewSub(leftVal, rightVal)
+			return cg.boxInt(diff)
 		case "*":
-			return cg.currentBlock.NewMul(left, right)
+			leftVal := cg.unboxInt(left)
+			rightVal := cg.unboxInt(right)
+			prod := cg.currentBlock.NewMul(leftVal, rightVal)
+			return cg.boxInt(prod)
 		case "/":
-			return cg.currentBlock.NewSDiv(left, right)
+			leftVal := cg.unboxInt(left)
+			rightVal := cg.unboxInt(right)
+			quot := cg.currentBlock.NewSDiv(leftVal, rightVal)
+			return cg.boxInt(quot)
 		case "<":
-			icmp := cg.currentBlock.NewICmp(enum.IPredSLT, left, right)
-			return cg.currentBlock.NewZExt(icmp, types.I32)
+			leftVal := cg.unboxInt(left)
+			rightVal := cg.unboxInt(right)
+			cmp := cg.currentBlock.NewICmp(enum.IPredSLT, leftVal, rightVal)
+			return cg.boxBool(cmp)
 		case "<=":
-			icmp := cg.currentBlock.NewICmp(enum.IPredSLE, left, right)
-			return cg.currentBlock.NewZExt(icmp, types.I32)
+			leftVal := cg.unboxInt(left)
+			rightVal := cg.unboxInt(right)
+			cmp := cg.currentBlock.NewICmp(enum.IPredSLE, leftVal, rightVal)
+			return cg.boxBool(cmp)
 		case "=":
+			// For Int objects.
+			if left.Type().Equal(cg.getClassPtrType("Int")) && right.Type().Equal(cg.getClassPtrType("Int")) {
+				leftVal := cg.unboxInt(left)
+				rightVal := cg.unboxInt(right)
+				cmp := cg.currentBlock.NewICmp(enum.IPredEQ, leftVal, rightVal)
+				return cg.boxBool(cmp)
+			}
+			// For Bool objects.
+			if left.Type().Equal(cg.getClassPtrType("Bool")) && right.Type().Equal(cg.getClassPtrType("Bool")) {
+				leftVal := cg.unboxBool(left)
+				rightVal := cg.unboxBool(right)
+				cmp := cg.currentBlock.NewICmp(enum.IPredEQ, leftVal, rightVal)
+				return cg.boxBool(cmp)
+			}
+			// For String objects.
 			if left.Type().Equal(cg.stringType) && right.Type().Equal(cg.stringType) {
 				leftCharPtrPtr := cg.currentBlock.NewGetElementPtr(cg.stringStruct, left,
 					constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
@@ -748,29 +945,41 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 				rightCharPtrPtr := cg.currentBlock.NewGetElementPtr(cg.stringStruct, right,
 					constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
 				rightChar := cg.currentBlock.NewLoad(types.NewPointer(types.I8), rightCharPtrPtr)
-				icmp := cg.currentBlock.NewICmp(enum.IPredEQ, leftChar, rightChar)
-				return cg.currentBlock.NewZExt(icmp, types.I32)
+				cmp := cg.currentBlock.NewICmp(enum.IPredEQ, leftChar, rightChar)
+				return cg.boxBool(cmp)
 			}
-			icmp := cg.currentBlock.NewICmp(enum.IPredEQ, left, right)
-			return cg.currentBlock.NewZExt(icmp, types.I32)
+			// Otherwise, compare pointers.
+			cmp := cg.currentBlock.NewICmp(enum.IPredEQ, left, right)
+			return cg.boxBool(cmp)
 		default:
 			fmt.Printf("Unknown binop %q\n", n.Operator)
-			return constant.NewInt(types.I32, 0)
+			return constant.NewNull(types.NewPointer(types.I32))
 		}
 	case *parser.UnaryOperation:
 		right := cg.genExpr(n.Right)
 		switch n.Operator {
 		case "~":
-			zero := constant.NewInt(types.I32, 0)
-			return cg.currentBlock.NewSub(zero, right)
+			// For int negation.
+			val := cg.unboxInt(right)
+			neg := cg.currentBlock.NewSub(constant.NewInt(types.I32, 0), val)
+			return cg.boxInt(neg)
 		case "not":
-			icmp := cg.currentBlock.NewICmp(enum.IPredEQ, right, constant.NewInt(types.I32, 0))
-			return cg.currentBlock.NewZExt(icmp, types.I32)
+			// For boolean not.
+			val := cg.unboxBool(right)
+			notVal := cg.currentBlock.NewXor(val, constant.NewInt(types.I1, 1))
+			return cg.boxBool(notVal)
 		case "isvoid":
-			return constant.NewInt(types.I32, 0)
+			// isvoid returns a Bool; if value is null, then true.
+			var cmp value.Value
+			if right.Type().(*types.PointerType) != nil {
+				cmp = cg.currentBlock.NewICmp(enum.IPredEQ, right, constant.NewNull(types.NewPointer(right.Type())))
+			} else {
+				cmp = constant.NewInt(types.I1, 0)
+			}
+			return cg.boxBool(cmp)
 		default:
 			fmt.Printf("Unknown unary operator %q\n", n.Operator)
-			return constant.NewInt(types.I32, 0)
+			return constant.NewNull(types.NewPointer(types.I32))
 		}
 	case *parser.New:
 		className := n.Type
@@ -788,7 +997,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 			if !exists {
 				fmt.Printf("Error: dispatch table for class %s not found\n", className)
 			} else {
-				// Set up the vtable pointer field.
 				vtablePtr := cg.currentBlock.NewBitCast(vtableGlobal, types.NewPointer(vtableGlobal.Init.Type()))
 				vtableGEP := cg.currentBlock.NewGetElementPtr(vtableGlobal.Init.Type(), vtablePtr,
 					constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
@@ -813,16 +1021,16 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 			var varType types.Type
 			switch assignment.Type {
 			case "Int":
-				varType = types.I32
+				varType = cg.getClassPtrType("Int")
 			case "String":
 				varType = cg.stringType
 			case "Bool":
-				varType = types.I1
+				varType = cg.getClassPtrType("Bool")
 			default:
 				if _, exists := cg.classTypes[assignment.Type]; exists {
 					varType = cg.getClassPtrType(assignment.Type)
 				} else {
-					varType = types.I32
+					varType = cg.getClassPtrType("Object")
 				}
 			}
 			alloca := cg.currentBlock.NewAlloca(varType)
@@ -834,8 +1042,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 			} else {
 				if assignment.Type == "String" {
 					initVal = cg.genStringConstantPtr("")
-				} else if varType.Equal(types.I32) || varType.Equal(types.I1) {
-					initVal = constant.NewInt(varType.(*types.IntType), 0)
 				} else {
 					initVal = constant.NewNull(varType.(*types.PointerType))
 				}
@@ -913,13 +1119,10 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 				fmt.Printf("Error: method %s not found in dispatch table for %s\n", n.Method.Ident, receiverType)
 				return constant.NewNull(types.NewPointer(types.I32))
 			}
-			// Obtain the vtable pointer from the receiver object.
 			vtablePtr := cg.currentBlock.NewGetElementPtr(cg.classTypes[receiverType], receiver,
 				constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
-			// Use the declared type of the vtable field to load it.
 			vtableFieldType := cg.classTypes[receiverType].(*types.StructType).Fields[0]
 			vtableVal := cg.currentBlock.NewLoad(vtableFieldType, vtablePtr)
-			// Now index into the vtable (vtableFieldType is of form i8** so its element type is i8*).
 			methodPtrPtr := cg.currentBlock.NewGetElementPtr(vtableFieldType, vtableVal,
 				constant.NewInt(types.I32, int64(idx)))
 			methodPtr := cg.currentBlock.NewLoad(methodPtrPtr.ElemType, methodPtrPtr)
@@ -929,6 +1132,8 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 				fmt.Printf("Error: static method %s not found\n", staticName)
 				return constant.NewNull(types.NewPointer(types.I32))
 			}
+			commonSelfType := cg.getClassPtrType("Object")
+			args[0] = cg.currentBlock.NewBitCast(receiver, commonSelfType)
 			castedMethodPtr := cg.currentBlock.NewBitCast(methodPtr, staticFn.Type())
 			return cg.currentBlock.NewCall(castedMethodPtr, args...)
 		}
@@ -937,13 +1142,13 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 		case "out_string":
 			if len(n.Params) < 1 {
 				fmt.Println("Warning: out_string with no params!")
-				return constant.NewInt(types.I32, 0)
+				return constant.NewNull(types.NewPointer(types.I32))
 			}
 			return cg.genCallPrintString(cg.genExpr(n.Params[0]))
 		case "out_int":
 			if len(n.Params) < 1 {
 				fmt.Println("Warning: out_int with no params!")
-				return constant.NewInt(types.I32, 0)
+				return constant.NewNull(types.NewPointer(types.I32))
 			}
 			return cg.genCallPrintInt(cg.genExpr(n.Params[0]))
 		case "in_string":
@@ -1020,14 +1225,16 @@ func (cg *CodeGenerator) genCallPrintString(strObj value.Value) value.Value {
 	return constant.NewNull(types.NewPointer(cg.stringType))
 }
 
-func (cg *CodeGenerator) genCallPrintInt(intVal value.Value) value.Value {
+func (cg *CodeGenerator) genCallPrintInt(intObj value.Value) value.Value {
+	// Unbox int.
+	val := cg.unboxInt(intObj)
 	zero := constant.NewInt(types.I32, 0)
 	fmtPtr := cg.currentBlock.NewGetElementPtr(cg.fmtInt.Type().(*types.PointerType).ElemType, cg.fmtInt, zero, zero)
-	cg.currentBlock.NewCall(cg.printfFunc, fmtPtr, intVal)
+	cg.currentBlock.NewCall(cg.printfFunc, fmtPtr, val)
 	if selfAlloca, ok := cg.variableEnv["self"]; ok {
 		return cg.currentBlock.NewLoad(selfAlloca.ElemType, selfAlloca)
 	}
-	return constant.NewNull(types.NewPointer(cg.stringType))
+	return constant.NewNull(types.NewPointer(cg.getClassPtrType("Int")))
 }
 
 func (cg *CodeGenerator) genCallInString() value.Value {
@@ -1051,7 +1258,7 @@ func (cg *CodeGenerator) genCallInInt() value.Value {
 	fmtPtr := cg.currentBlock.NewGetElementPtr(cg.fmtIntIn.Type().(*types.PointerType).ElemType, cg.fmtIntIn, zero, zero)
 	cg.currentBlock.NewCall(cg.scanfFunc, fmtPtr, allocaI32)
 	loadedVal := cg.currentBlock.NewLoad(types.I32, allocaI32)
-	return loadedVal
+	return cg.boxInt(loadedVal)
 }
 
 func (cg *CodeGenerator) newUniqueName(prefix string) string {

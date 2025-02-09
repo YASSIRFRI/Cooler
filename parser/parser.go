@@ -592,7 +592,7 @@ func (p *Parser) parseTypeAction() (*TypeAction, error) {
     ty := typeTok.Value.(string)
     p.nextToken()
 
-    if p.currentToken() == nil || p.currentToken().Type != "DARROW" {
+    if p.currentToken() == nil || p.currentToken().Type != "ACTION" {
         return nil, fmt.Errorf("expected '=>' in case branch, got %v", p.currentToken())
     }
     p.nextToken() //  '=>'
