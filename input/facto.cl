@@ -4,8 +4,7 @@ class Main inherits IO {
     };
     main(): SELF_TYPE {
         {
-            t : Int <- 10;
-            out_int(t);
+            out_int(factorial(5));
         };
     };
 };
