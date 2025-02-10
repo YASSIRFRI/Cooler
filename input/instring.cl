@@ -8,6 +8,7 @@ class Main inherits IO{
                 out_string("You entered the integer: ");
                 out_int(n-1);
                 out_string("\n");
+                
             }
         }
     };
