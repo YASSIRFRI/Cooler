@@ -44,16 +44,17 @@ class Goldfish inherits Fish {
 };
 
 
-class Main {
+class Main inherits IO{
     main() : Object {
         let animal : Animal <- new Animal,
             dog : Animal    <- new Dog,
-            cat : Animal    <- new Cat
-            bird : Bird     <- new Bird,
+            cat : Animal    <- new Cat,
+            bird : Bird     <- new Bird
         in {
             out_string(animal.speak());
             out_string(dog.speak());
             out_string(cat.speak());
+            out_string(bird.speak());
         }
     };
 };

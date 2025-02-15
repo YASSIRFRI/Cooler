@@ -1,4 +1,3 @@
-// package codegen
 package codegen
 
 import (
@@ -25,7 +24,6 @@ func (a paramAttr) IsParamAttribute() {}
 const Nocapture paramAttr = "nocapture"
 
 // --------------------------------------------------------------------------
-// DispatchEntry is used to compute dispatch table layouts.
 type DispatchEntry struct {
     Class  string
     Method string
@@ -66,26 +64,21 @@ type CodeGenerator struct {
     // For uniqueness in block names etc.
     counter int
 
-    // Canonical pointer types for each COOL class, e.g. %X_struct*
     classPtrTypes map[string]types.Type
 
-    // The internal LLVM struct for built-in classes:
     stringStruct *types.StructType
     intStruct    *types.StructType
     boolStruct   *types.StructType
     objectStruct *types.StructType
     ioStruct     *types.StructType
 
-    // Because we treat "String" as a pointer to `stringStruct`
     stringType types.Type
 
-    // For dynamic dispatch: vtables
     dispatchTableLayouts map[string][]DispatchEntry
     dispatchTables       map[string]*ir.Global
     methodIndices        map[string]int
 }
 
-// uniqueGlobalName produces a unique global name.
 func (cg *CodeGenerator) uniqueGlobalName(prefix string) string {
     return fmt.Sprintf("%s_%d", prefix, len(cg.module.Globals))
 }
@@ -153,7 +146,8 @@ func (cg *CodeGenerator) unboxBool(obj value.Value) value.Value {
 func (cg *CodeGenerator) typeSize(t types.Type) int64 {
     switch tt := t.(type) {
     case *types.StructType:
-        return int64(len(tt.Fields)) * 8 // simplistic approach
+        // Very rough. Each field 8 bytes, etc.
+        return int64(len(tt.Fields)) * 8
     case *types.PointerType:
         return 8
     case *types.IntType:
@@ -163,7 +157,6 @@ func (cg *CodeGenerator) typeSize(t types.Type) int64 {
     }
 }
 
-// getClassPtrType returns the pointer type for a COOL class name, creating if needed.
 func (cg *CodeGenerator) getClassPtrType(className string) types.Type {
     if ptr, ok := cg.classPtrTypes[className]; ok {
         return ptr
@@ -173,7 +166,6 @@ func (cg *CodeGenerator) getClassPtrType(className string) types.Type {
         cg.classPtrTypes[className] = ptr
         return ptr
     }
-    // fallback if not found
     return types.NewPointer(types.I8)
 }
 
@@ -212,7 +204,7 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.boolStruct.SetName("BoolStruct")
     cg.module.NewTypeDef("BoolStruct", cg.boolStruct)
 
-    // Builtin String: vtable pointer + i8* data
+    // Builtin String: vtable pointer + i8* (data pointer)
     cg.stringStruct = types.NewStruct(
         types.NewPointer(types.I8), // vtable
         types.NewPointer(types.I8), // data pointer
@@ -225,12 +217,15 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.ioStruct.SetName("IOStruct")
     cg.module.NewTypeDef("IOStruct", cg.ioStruct)
 
+    // Register the builtin class -> struct mappings
     cg.classTypes["Object"] = cg.objectStruct
-    cg.classTypes["Int"] = cg.intStruct
-    cg.classTypes["Bool"] = cg.boolStruct
+    cg.classTypes["Int"]    = cg.intStruct
+    cg.classTypes["Bool"]   = cg.boolStruct
     cg.classTypes["String"] = cg.stringStruct
-    cg.classTypes["IO"] = cg.ioStruct
+    cg.classTypes["IO"]     = cg.ioStruct
+    cg.classPtrTypes["StringStruct"] = types.NewPointer(cg.stringStruct)
 
+    // Our canonical "String" pointer
     cg.stringType = types.NewPointer(cg.stringStruct)
 
     cg.declareExternalIO()
@@ -250,12 +245,12 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
         classMap[classNode.Name] = classNode
     }
 
-    // 1) Create class types for user-defined classes
+    // 1) Create all class structs
     for _, classNode := range prog.Classes {
         cg.createClassType(classNode, classMap)
     }
 
-    // 2) Declare all methods (no bodies yet)
+    // 2) Declare all methods
     for _, classNode := range prog.Classes {
         for _, feat := range classNode.Features {
             if method, ok := feat.(*parser.Method); ok {
@@ -275,12 +270,13 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
         cg.generateMethodBodies(classNode)
     }
 
-    // If there's a "Main_main", call it. Else try fallback
     var entryFn *ir.Func
     if fn := findFuncByName(cg.module, "Main_main"); fn != nil {
+        fmt.Printf("Found Main %s\n",fn)
         entryFn = fn
     } else {
         for _, cls := range prog.Classes {
+        fmt.Printf("Not Found Main %s\n",fn)
             tryName := fmt.Sprintf("%s_main", cls.Name)
             if fn := findFuncByName(cg.module, tryName); fn != nil {
                 entryFn = fn
@@ -288,12 +284,11 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
             }
         }
     }
-
     if entryFn != nil {
+        fmt.Println("Found entry point")
         cg.currentBlock.NewCall(entryFn)
     }
     cg.currentBlock.NewRet(constant.NewInt(types.I32, 0))
-
     return cg.module
 }
 
@@ -306,18 +301,21 @@ func findFuncByName(mod *ir.Module, name string) *ir.Func {
     return nil
 }
 
+// --------------------------------------------------------------------------
+// Builtin vtables: no methods (or trivial) for Object, Int, String, Bool, IO
+// --------------------------------------------------------------------------
 func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
     cg.createVTableGlobal("Object", []DispatchEntry{})
-    cg.createVTableGlobal("Int", []DispatchEntry{})
+    cg.createVTableGlobal("Int",    []DispatchEntry{})
     cg.createVTableGlobal("String", []DispatchEntry{})
-    cg.createVTableGlobal("Bool", []DispatchEntry{})
-    cg.createVTableGlobal("IO", []DispatchEntry{})
+    cg.createVTableGlobal("Bool",   []DispatchEntry{})
+    cg.createVTableGlobal("IO",     []DispatchEntry{})
 }
 
 func (cg *CodeGenerator) createVTableGlobal(className string, layout []DispatchEntry) {
     commonMethodPtrType := types.NewPointer(types.NewFunc(
-        cg.getClassPtrType("Object"), // return type
-        cg.getClassPtrType("Object"), // param #1 = self
+        cg.getClassPtrType(className),
+        cg.getClassPtrType(className),
     ))
     arrType := types.NewArray(uint64(len(layout)), commonMethodPtrType)
     elems := make([]constant.Constant, len(layout))
@@ -430,14 +428,14 @@ func (cg *CodeGenerator) defineStringConcat() {
     charPtrPtr1 := entry.NewGetElementPtr(
         cg.stringStruct, fn.Params[0],
         constant.NewInt(types.I32, 0),
-        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
     )
     charPtr1 := entry.NewLoad(types.NewPointer(types.I8), charPtrPtr1)
 
     charPtrPtr2 := entry.NewGetElementPtr(
         cg.stringStruct, fn.Params[1],
         constant.NewInt(types.I32, 0),
-        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
     )
     charPtr2 := entry.NewLoad(types.NewPointer(types.I8), charPtrPtr2)
 
@@ -480,11 +478,11 @@ func (cg *CodeGenerator) defineStringConcat() {
     newStringObjRaw := entry.NewCall(mallocFn, sizeStringObj)
     newStringObj := entry.NewBitCast(newStringObjRaw, cg.stringType)
 
-    // Store newCharPtr into the single field
+    // Store newCharPtr into the second field
     charFieldPtr := entry.NewGetElementPtr(
         cg.stringStruct, newStringObj,
         constant.NewInt(types.I32, 0),
-        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
     )
     entry.NewStore(newCharPtr, charFieldPtr)
 
@@ -541,7 +539,7 @@ func (cg *CodeGenerator) defineStringSubstr() {
     charFieldPtr := finishBlock.NewGetElementPtr(
         cg.stringStruct, newStringObj,
         constant.NewInt(types.I32, 0),
-        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
     )
     finishBlock.NewStore(newCharPtr, charFieldPtr)
     finishBlock.NewRet(newStringObj)
@@ -551,6 +549,7 @@ func (cg *CodeGenerator) defineStringSubstr() {
 // Create class struct type (with inheritance) in LLVM
 // --------------------------------------------------------------------------
 func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[string]*parser.Class) types.Type {
+    // If it's built-in, we already have it
     if isBuiltIn(classNode.Name) {
         return cg.classTypes[classNode.Name]
     }
@@ -573,7 +572,6 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
                 }
                 index = len(fieldTypes)
             }
-            // Copy parent's attribute indices
             for key, idxVal := range cg.attributeIndices {
                 if strings.HasPrefix(key, classNode.Inherits+".") {
                     attrName := key[len(classNode.Inherits)+1:]
@@ -585,7 +583,7 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
         }
     }
 
-    // Add this class's own attributes
+    // Collect this class's attributes
     for _, feat := range classNode.Features {
         if attr, ok := feat.(*parser.Attribute); ok {
             var attrType types.Type
@@ -600,7 +598,7 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
                 if _, exists := cg.classTypes[attr.Type]; exists {
                     attrType = cg.getClassPtrType(attr.Type)
                 } else {
-                    attrType = cg.getClassPtrType("Object")
+                    panic("Unknown attribute type: " + attr.Type)
                 }
             }
             key := fmt.Sprintf("%s.%s", classNode.Name, attr.Ident)
@@ -695,26 +693,33 @@ func (cg *CodeGenerator) generateMethodBodies(classNode *parser.Class) {
             cg.variableTypeEnv = make(map[string]string)
             cg.currentClass = classNode.Name
 
+            // Store all parameters in allocas
             for i, param := range fn.Params {
                 alloca := cg.currentBlock.NewAlloca(param.Type())
                 cg.currentBlock.NewStore(param, alloca)
                 cg.variableEnv[param.LocalName] = alloca
-                if i > 0 && i-1 < len(method.Formals) {
-                    cg.variableTypeEnv[param.LocalName] = method.Formals[i-1].Type
-                } else if i == 0 {
-                    // store "self" in a properly bitcasted alloca
+
+                // param #0 = self
+                if i == 0 {
+                    // re-cast self to the actual user-defined pointer
                     selfVal := cg.currentBlock.NewLoad(alloca.ElemType, alloca)
                     castedSelf := cg.currentBlock.NewBitCast(selfVal, cg.getClassPtrType(classNode.Name))
                     newAlloca := cg.currentBlock.NewAlloca(castedSelf.Type())
                     cg.currentBlock.NewStore(castedSelf, newAlloca)
                     cg.variableEnv["self"] = newAlloca
                     cg.variableTypeEnv["self"] = classNode.Name
+                } else {
+                    // Normal formal param
+                    if i-1 < len(method.Formals) {
+                        cg.variableTypeEnv[param.LocalName] = method.Formals[i-1].Type
+                    }
                 }
             }
 
+            // Generate code for method body
             retVal := cg.genExpr(method.Body)
 
-            // Box or bitcast if needed
+            // Ensure we return the correct type if we have to box or bitcast
             if !retVal.Type().Equal(fn.Sig.RetType) {
                 if fn.Sig.RetType.Equal(cg.getClassPtrType("Int")) &&
                     retVal.Type().Equal(types.I32) {
@@ -749,7 +754,6 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
     }
 
     var layout []DispatchEntry
-    // Inherit parent's layout first
     if classNode.Inherits != "" && !isBuiltIn(classNode.Inherits) {
         cg.buildDispatchTable(classMap[classNode.Inherits], classMap)
         parentLayout := cg.dispatchTableLayouts[classNode.Inherits]
@@ -775,7 +779,6 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
     }
     cg.dispatchTableLayouts[classNode.Name] = layout
 
-    // Record method indices for dynamic call lookups
     for i, entry := range layout {
         key := fmt.Sprintf("%s.%s", classNode.Name, entry.Method)
         cg.methodIndices[key] = i
@@ -808,11 +811,10 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
 }
 
 // --------------------------------------------------------------------------
-// genExpr: Expression code generation
+// genExpr recursively generates LLVM IR for each COOL expression node
 // --------------------------------------------------------------------------
 func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
     switch n := node.(type) {
-
     case *parser.IntConst:
         return cg.boxInt(constant.NewInt(types.I32, int64(n.Value)))
 
@@ -830,19 +832,16 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         if alloca, ok := cg.variableEnv["self"]; ok {
             return cg.currentBlock.NewLoad(alloca.ElemType, alloca)
         }
-        // Fallback: null
         return constant.NewNull(types.NewPointer(types.I8))
 
     case *parser.Ident:
-        // local var?
         if alloca, ok := cg.variableEnv[n.Name]; ok {
             return cg.currentBlock.NewLoad(alloca.ElemType, alloca)
         }
-        // attribute?
         if cg.currentClass != "" {
             key := fmt.Sprintf("%s.%s", cg.currentClass, n.Name)
             if idx, found := cg.attributeIndices[key]; found {
-                selfAlloca, ok2 := cg.variableEnv["self"]
+                selfAlloca, ok2 := cg.variableEnv[cg.currentClass]
                 if !ok2 {
                     return constant.NewNull(types.NewPointer(types.I8))
                 }
@@ -857,44 +856,50 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                 return cg.currentBlock.NewLoad(ptr.ElemType, ptr)
             }
         }
-        // fallback
         return constant.NewNull(types.NewPointer(types.I8))
 
     case *parser.Assignment:
         val := cg.genExpr(n.Expr)
-        // local var?
-        if alloca, ok := cg.variableEnv[n.Ident.Name]; ok {
-            // Possibly cast
-            if !val.Type().Equal(alloca.ElemType) {
-                val = cg.currentBlock.NewBitCast(val, alloca.ElemType)
+        lhsName := n.Ident.Name
+        fmt.Printf("\n[ASSIGN] Storing into '%s %s'\n", lhsName, val)
+        fmt.Printf("         RHS type is: %s\n", val.Type())
+
+        // 1) If it's a local var
+        if alloca, ok := cg.variableEnv[lhsName]; ok {
+            lhsTy := alloca.ElemType
+            fmt.Printf("         Found local var type: %s\n", lhsTy)
+            if !val.Type().Equal(lhsTy) {
+                val = cg.currentBlock.NewBitCast(val, lhsTy)
             }
             cg.currentBlock.NewStore(val, alloca)
             return val
         }
+
+        // 2) If it's an attribute
         if cg.currentClass != "" {
-            key := fmt.Sprintf("%s.%s", cg.currentClass, n.Ident.Name)
+            fmt.Printf("Parser Assignment %s\n", lhsName)
+            key := fmt.Sprintf("%s.%s", cg.currentClass, lhsName)
             if idx, found := cg.attributeIndices[key]; found {
-                selfAlloca, ok2 := cg.variableEnv["self"]
-                if !ok2 {
-                    return val
-                }
+                fmt.Printf("         Found attribute '%s' at index %d\n", key, idx)
+                selfAlloca := cg.variableEnv["self"]
                 selfVal := cg.currentBlock.NewLoad(selfAlloca.ElemType, selfAlloca)
-                casted := cg.currentBlock.NewBitCast(selfVal, cg.getClassPtrType(cg.currentClass))
+                fmt.Printf("         Self type is: %s\n", selfVal.Type())
                 fieldPtr := cg.currentBlock.NewGetElementPtr(
-                    cg.classTypes[cg.currentClass],
-                    casted,
-                    constant.NewInt(types.I32, 0),
+                    val.Type(),
+                    selfVal,
                     constant.NewInt(types.I32, int64(idx)),
                 )
-                if !val.Type().Equal(fieldPtr.ElemType) {
-                    val = cg.currentBlock.NewBitCast(val, fieldPtr.ElemType)
-                }
+                fmt.Printf("         Field type is: %s\n", fieldPtr)
                 cg.currentBlock.NewStore(val, fieldPtr)
                 return val
             }
         }
+
+        // 3) Otherwise, create a new local if none was found
+        fmt.Printf("         No local var or attribute found; creating new local.\n")
         alloca := cg.currentBlock.NewAlloca(val.Type())
-        cg.variableEnv[n.Ident.Name] = alloca
+        fmt.Printf("         Allocating new local var '%s' of type %s\n", lhsName, val.Type())
+        cg.variableEnv[lhsName] = alloca
         cg.currentBlock.NewStore(val, alloca)
         return val
 
@@ -978,17 +983,19 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             cmp := cg.currentBlock.NewICmp(enum.IPredSLE, cg.unboxInt(left), cg.unboxInt(right))
             return cg.boxBool(cmp)
         case "=":
-            // handle Int, Bool, String specifically, else pointer compare
+            // Compare Int?
             if left.Type().Equal(cg.getClassPtrType("Int")) &&
                 right.Type().Equal(cg.getClassPtrType("Int")) {
                 eq := cg.currentBlock.NewICmp(enum.IPredEQ, cg.unboxInt(left), cg.unboxInt(right))
                 return cg.boxBool(eq)
             }
+            // Compare Bool?
             if left.Type().Equal(cg.getClassPtrType("Bool")) &&
                 right.Type().Equal(cg.getClassPtrType("Bool")) {
                 eq := cg.currentBlock.NewICmp(enum.IPredEQ, cg.unboxBool(left), cg.unboxBool(right))
                 return cg.boxBool(eq)
             }
+            // Compare String?
             if left.Type().Equal(cg.stringType) && right.Type().Equal(cg.stringType) {
                 // Compare the underlying i8*
                 lPtrPtr := cg.currentBlock.NewGetElementPtr(
@@ -1008,6 +1015,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                 eq := cg.currentBlock.NewICmp(enum.IPredEQ, lPtr, rPtr)
                 return cg.boxBool(eq)
             }
+            // Default pointer comparison
             eq := cg.currentBlock.NewICmp(enum.IPredEQ, left, right)
             return cg.boxBool(eq)
         default:
@@ -1045,20 +1053,16 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         rawPtr := cg.currentBlock.NewCall(mallocFn, sizeConst)
         objPtr := cg.currentBlock.NewBitCast(rawPtr, cg.getClassPtrType(className))
 
-        // Store vtable pointer in field0 if not built-in
-        vtGlobal, ok := cg.dispatchTables[className]
-        if ok {
-            // Convert the vtable global to i8*
+        // Set vtable pointer
+        if vtGlobal, ok := cg.dispatchTables[className]; ok {
             var vtableAsI8Ptr constant.Constant
             arrType, isArr := vtGlobal.Init.Type().(*types.ArrayType)
             if isArr {
                 vtPtr := constant.NewBitCast(vtGlobal, types.NewPointer(arrType))
                 vtableAsI8Ptr = constant.NewBitCast(vtPtr, types.NewPointer(types.I8))
             } else {
-                // fallback
                 vtableAsI8Ptr = constant.NewBitCast(vtGlobal, types.NewPointer(types.I8))
             }
-            // store in object
             field0 := cg.currentBlock.NewGetElementPtr(
                 st, objPtr,
                 constant.NewInt(types.I32, 0),
@@ -1069,7 +1073,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         return objPtr
 
     case *parser.Let:
-        // Create new local variable environment scope
+        // We create a new scope for let‐bindings
         oldEnv := cg.variableEnv
         newEnv := make(map[string]*ir.InstAlloca)
         for k, v := range oldEnv {
@@ -1084,7 +1088,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         }
         cg.variableTypeEnv = newTypeEnv
 
-        // create local variables with initializers
+        // Allocate each binding
         for _, binding := range n.Assignments {
             var t types.Type
             switch binding.Type {
@@ -1105,6 +1109,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             cg.variableEnv[binding.Ident] = alloca
             cg.variableTypeEnv[binding.Ident] = binding.Type
 
+            // Initialize
             var initVal value.Value
             if binding.Init != nil {
                 initVal = cg.genExpr(binding.Init)
@@ -1120,10 +1125,10 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             }
             cg.currentBlock.NewStore(initVal, alloca)
         }
-
+        // Body
         result := cg.genExpr(n.Body)
 
-        // restore env
+        // Restore old env
         cg.variableEnv = oldEnv
         cg.variableTypeEnv = oldTypeEnv
         return result
@@ -1133,7 +1138,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         if len(n.TypeActions) == 0 {
             return constant.NewNull(types.NewPointer(types.I8))
         }
-        // Minimal placeholder for demonstration
+        // Minimal placeholder
         first := n.TypeActions[0]
         oldEnv := cg.variableEnv
         newEnv := make(map[string]*ir.InstAlloca)
@@ -1148,14 +1153,10 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         return res
 
     case *parser.MethodCall:
-        // Dynamic or static dispatch
         receiver := cg.genExpr(n.Object)
+        receiver = cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType(cg.currentClass))
+        staticType := receiver.Type().(*types.PointerType).ElemType.Name()
 
-        // For dispatch, treat it as an Object pointer initially
-        receiver = cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType("Object"))
-
-        // Figure out the static type we think the receiver has
-        staticType := cg.currentClass
         if id, ok := n.Object.(*parser.Ident); ok {
             if t, found := cg.variableTypeEnv[id.Name]; found {
                 staticType = t
@@ -1164,77 +1165,87 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             staticType = newExpr.Type
         }
 
-        // Prepare arguments: first param is the self (receiver)
         args := []value.Value{receiver}
         for _, p := range n.Method.Params {
             args = append(args, cg.genExpr(p))
         }
 
-        // If built-in class, see if there's a direct built-in function
         if isBuiltIn(staticType) {
             fnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
             builtinFn := findFuncByName(cg.module, fnName)
             if builtinFn == nil {
-                // fallback for known string methods
-                switch n.Method.Ident {
-                case "length":
-                    lengthFn := findFuncByName(cg.module, "String_length")
-                    if lengthFn == nil {
-                        return constant.NewNull(types.NewPointer(types.I8))
+                if staticType == "String" {
+                    switch n.Method.Ident {
+                    case "length":
+                        lengthFn := findFuncByName(cg.module, "String_length")
+                        if lengthFn == nil {
+                            return constant.NewNull(types.NewPointer(types.I8))
+                        }
+                        i32val := cg.currentBlock.NewCall(lengthFn, args[0])
+                        return cg.boxInt(i32val)
+                    case "concat":
+                        concatFn := findFuncByName(cg.module, "String_concat")
+                        if concatFn == nil {
+                            return constant.NewNull(types.NewPointer(types.I8))
+                        }
+                        return cg.currentBlock.NewCall(concatFn, args[0], args[1])
+                    case "substr":
+                        substrFn := findFuncByName(cg.module, "String_substr")
+                        if substrFn == nil {
+                            return constant.NewNull(types.NewPointer(types.I8))
+                        }
+                        return cg.currentBlock.NewCall(substrFn, args[0], args[1], args[2])
                     }
-                    i32val := cg.currentBlock.NewCall(lengthFn, args[0])
-                    return cg.boxInt(i32val)
-                case "concat":
-                    concatFn := findFuncByName(cg.module, "String_concat")
-                    if concatFn == nil {
-                        return constant.NewNull(types.NewPointer(types.I8))
-                    }
-                    return cg.currentBlock.NewCall(concatFn, args[0], args[1])
-                case "substr":
-                    substrFn := findFuncByName(cg.module, "String_substr")
-                    if substrFn == nil {
-                        return constant.NewNull(types.NewPointer(types.I8))
-                    }
-                    return cg.currentBlock.NewCall(substrFn, args[0], args[1], args[2])
-                default:
-                    // no known built-in
-                    return constant.NewNull(types.NewPointer(types.I8))
                 }
+                return constant.NewNull(types.NewPointer(types.I8))
             }
-            // direct built-in call
+            fmt.Printf("MethodCall %s (built-in)\n", fnName)
             return cg.currentBlock.NewCall(builtinFn, args...)
         }
 
-        // Otherwise, do dynamic dispatch
-        key := fmt.Sprintf("%s.%s", staticType, n.Method.Ident)
+        caller_ident, ok := n.Object.(*parser.Ident)
+        var key string
+        var caller_ident_new *parser.New
+        var recType string
+        if ok {
+            key = fmt.Sprintf("%s.%s",
+                cg.attributeTypeEnv[fmt.Sprintf("%s.%s", cg.currentClass, caller_ident.Name)],
+                n.Method.Ident,
+            )
+            recType = cg.attributeTypeEnv[fmt.Sprintf("%s.%s", cg.currentClass, caller_ident.Name)]
+        } else {
+            caller_ident_new, ok = n.Object.(*parser.New)
+            if ok {
+                fmt.Printf("not Ident %s\n", caller_ident_new.Type)
+                key = fmt.Sprintf("%s.%s", caller_ident_new.Type, n.Method.Ident)
+                recType = caller_ident_new.Type
+            }else{
+                fmt.Printf("not Ident %s\n", n.Object)
+            }
+        }
         idx, found := cg.methodIndices[key]
         if !found {
-            // fallback
+            fmt.Printf("MethodCall Not found %s %s,  targettype %s, currentclass %s\n", key, staticType, receiver.Type(),cg.currentClass)
             return constant.NewNull(types.NewPointer(types.I8))
         }
-
-        // We have a pointer to e.g. %SomeClass_struct
-        casted := cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType(staticType))
-
-        // *** FIX: load as i8* explicitly from field 0, not the entire struct
+        fmt.Println(cg.classPtrTypes[recType])
+        casted := cg.currentBlock.NewBitCast(receiver, cg.classPtrTypes[recType])
+        fmt.Printf("MethodCall %s (user-defined) %s\n", key, casted)
+        fmt.Printf("Vptr rectype %s classType %s casted %s\n",recType, cg.classTypes[recType],casted.String())
         vtPtr := cg.currentBlock.NewGetElementPtr(
-            cg.classTypes[staticType],
+            cg.classTypes[recType],
             casted,
-            constant.NewInt(types.I32, 0),
-            constant.NewInt(types.I32, 0),
+            constant.NewInt(types.I32, 1),
         )
-        // vtPtr is now i8**. Load i8* from it:
         vtField := cg.currentBlock.NewLoad(types.NewPointer(types.I8), vtPtr)
-
-        // bitcast i8* => [N x fn ptr]* so we can do a GEP on the array
-        layout := cg.dispatchTableLayouts[staticType]
+        layout := cg.dispatchTableLayouts[recType]
         commonSelfType := cg.getClassPtrType("Object")
         commonMethodFnType := types.NewFunc(commonSelfType, commonSelfType)
         commonMethodPtrType := types.NewPointer(commonMethodFnType)
         arrType := types.NewArray(uint64(len(layout)), commonMethodPtrType)
-
         vtablePtr := cg.currentBlock.NewBitCast(vtField, types.NewPointer(arrType))
-
+        fmt.Printf("Method Index %d, name %s\n",idx,key)
+        fmt.Println(cg.methodIndices)
         methodPtrPtr := cg.currentBlock.NewGetElementPtr(
             arrType,
             vtablePtr,
@@ -1242,37 +1253,41 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             constant.NewInt(types.I32, int64(idx)),
         )
         methodPtr := cg.currentBlock.NewLoad(commonMethodPtrType, methodPtrPtr)
-
-        // bitcast to the actual function type
-        staticFnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
+        staticFnName := fmt.Sprintf("%s_%s", recType, n.Method.Ident)
         staticFn := findFuncByName(cg.module, staticFnName)
         if staticFn == nil {
+            fmt.Printf("MethodCall Not found %s %s\n", staticFnName, methodPtr)
             return constant.NewNull(types.NewPointer(types.I8))
         }
+        fmt.Printf("MethodCall %s (user-defined) %s method ptr\n", staticFnName, methodPtr)
         castedFn := cg.currentBlock.NewBitCast(methodPtr, staticFn.Type())
-
-        return cg.currentBlock.NewCall(castedFn, args...)
+        fmt.Printf("Calling function %s\n ", casted)
+        function:=cg.currentBlock.NewCall(castedFn, args...)
+        fmt.Printf("Calling function %s\n ", function.Name())
+        return function
 
     case *parser.FunctionCall:
-        // E.g. out_string(...)
         switch n.Ident {
         case "out_string":
             if len(n.Params) < 1 {
                 return constant.NewNull(types.NewPointer(types.I8))
             }
             return cg.genCallPrintString(cg.genExpr(n.Params[0]))
+
         case "out_int":
             if len(n.Params) < 1 {
                 return constant.NewNull(types.NewPointer(types.I8))
             }
             return cg.genCallPrintInt(cg.genExpr(n.Params[0]))
+
         case "in_string":
             return cg.genCallInString()
+
         case "in_int":
             return cg.genCallInInt()
         }
 
-        // normal function call in same class
+        // Otherwise, call a method by name, passing self first if we have it
         var args []value.Value
         if cg.currentClass != "" {
             if selfAlloca, ok := cg.variableEnv["self"]; ok {
@@ -1305,13 +1320,19 @@ func (cg *CodeGenerator) genStringConstantPtr(strVal string) value.Value {
         strVal += "\x00"
     }
     arr := constant.NewCharArrayFromString(strVal)
-
     arrayName := fmt.Sprintf("str_%d", cg.stringCounter*2)
     g := cg.module.NewGlobalDef(arrayName, arr)
-    gep := constant.NewGetElementPtr(g.Init.Type(), g)
+    gep := constant.NewGetElementPtr(g.Init.Type(), g,
+        constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 0))
     gep.InBounds = true
-    strStruct := types.NewStruct(types.NewPointer(types.I8))
-    init := constant.NewStruct(strStruct, gep)
+    vtGlobal := cg.dispatchTables["String"]
+    vtablePtr := constant.NewBitCast(vtGlobal, types.NewPointer(types.I8))
+
+    init := constant.NewStruct(
+        cg.stringStruct,
+        vtablePtr, 
+        gep,      
+    )
     objName := fmt.Sprintf("str_obj_%d", cg.stringCounter*2+1)
     globStrObj := cg.module.NewGlobalDef(objName, init)
     globStrObj.Immutable = true
@@ -1321,10 +1342,13 @@ func (cg *CodeGenerator) genStringConstantPtr(strVal string) value.Value {
     return ptr
 }
 
+// --------------------------------------------------------------------------
+// Print/in functions for string/int
+// --------------------------------------------------------------------------
 func (cg *CodeGenerator) genCallPrintString(strObj value.Value) value.Value {
     zero := constant.NewInt(types.I32, 0)
     charPtrPtr := cg.currentBlock.NewGetElementPtr(
-        cg.stringStruct, strObj, zero, zero,
+        cg.stringStruct, strObj, zero, constant.NewInt(types.I32, 1),
     )
     charPtr := cg.currentBlock.NewLoad(types.NewPointer(types.I8), charPtrPtr)
 
@@ -1368,7 +1392,6 @@ func (cg *CodeGenerator) genCallInString() value.Value {
     )
     cg.currentBlock.NewCall(cg.scanfFunc, fmtPtr, ptr)
 
-    // Now build a new String object on the heap
     mallocFn := findFuncByName(cg.module, "malloc")
     sizeStringObj := constant.NewInt(types.I64, cg.typeSize(cg.stringStruct))
     newStringObjRaw := cg.currentBlock.NewCall(mallocFn, sizeStringObj)
@@ -1376,14 +1399,13 @@ func (cg *CodeGenerator) genCallInString() value.Value {
 
     charFieldPtr := cg.currentBlock.NewGetElementPtr(
         cg.stringStruct, newStringObj,
-        zero, zero,
+        zero, constant.NewInt(types.I32, 1),
     )
     cg.currentBlock.NewStore(ptr, charFieldPtr)
     return newStringObj
 }
 
 func (cg *CodeGenerator) genCallInInt() value.Value {
-    // read into local i32
     allocaI32 := cg.currentBlock.NewAlloca(types.I32)
     zero := constant.NewInt(types.I32, 0)
     fmtPtr := cg.currentBlock.NewGetElementPtr(

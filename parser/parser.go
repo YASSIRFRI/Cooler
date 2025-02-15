@@ -518,6 +518,7 @@ func (p *Parser) parseNewExpression() (Node, error) {
         return nil, fmt.Errorf("expected TYPE after NEW, got %v", tok)
     }
     typeName := tok.Value.(string)
+    fmt.Println("Parser*** The type name is: ",typeName)
     p.nextToken()
     return &New{Type: typeName}, nil
 }
