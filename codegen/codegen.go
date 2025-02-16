@@ -1169,64 +1169,43 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             fnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
             builtinFn := findFuncByName(cg.module, fnName)
             if builtinFn == nil {
-                if staticType == "String" {
-                    switch n.Method.Ident {
-                    case "length":
-                        lengthFn := findFuncByName(cg.module, "String_length")
-                        if lengthFn == nil {
-                            return constant.NewNull(types.NewPointer(types.I8))
-                        }
-                        i32val := cg.currentBlock.NewCall(lengthFn, args[0])
-                        return cg.boxInt(i32val)
-                    case "concat":
-                        concatFn := findFuncByName(cg.module, "String_concat")
-                        if concatFn == nil {
-                            return constant.NewNull(types.NewPointer(types.I8))
-                        }
-                        return cg.currentBlock.NewCall(concatFn, args[0], args[1])
-                    case "substr":
-                        substrFn := findFuncByName(cg.module, "String_substr")
-                        if substrFn == nil {
-                            return constant.NewNull(types.NewPointer(types.I8))
-                        }
-                        return cg.currentBlock.NewCall(substrFn, args[0], args[1], args[2])
+                // fallback for known string methods
+                switch n.Method.Ident {
+                case "length":
+                    lengthFn := findFuncByName(cg.module, "String_length")
+                    if lengthFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
                     }
+                    i32val := cg.currentBlock.NewCall(lengthFn, args[0])
+                    return cg.boxInt(i32val)
+                case "concat":
+                    concatFn := findFuncByName(cg.module, "String_concat")
+                    if concatFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    return cg.currentBlock.NewCall(concatFn, args[0], args[1])
+                case "substr":
+                    substrFn := findFuncByName(cg.module, "String_substr")
+                    if substrFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    return cg.currentBlock.NewCall(substrFn, args[0], args[1], args[2])
+                default:
+                    // no known built-in
+                    return constant.NewNull(types.NewPointer(types.I8))
                 }
-                return constant.NewNull(types.NewPointer(types.I8))
             }
-            fmt.Printf("MethodCall %s (built-in)\n", fnName)
             return cg.currentBlock.NewCall(builtinFn, args...)
         }
 
-        caller_ident, ok := n.Object.(*parser.Ident)
-        var key string
-        var caller_ident_new *parser.New
-        var recType string
-        if ok {
-            key = fmt.Sprintf("%s.%s",
-                cg.attributeTypeEnv[fmt.Sprintf("%s.%s", cg.currentClass, caller_ident.Name)],
-                n.Method.Ident,
-            )
-            recType = cg.attributeTypeEnv[fmt.Sprintf("%s.%s", cg.currentClass, caller_ident.Name)]
-        } else {
-            caller_ident_new, ok = n.Object.(*parser.New)
-            if ok {
-                fmt.Printf("not Ident %s\n", caller_ident_new.Type)
-                key = fmt.Sprintf("%s.%s", caller_ident_new.Type, n.Method.Ident)
-                recType = caller_ident_new.Type
-            }else{
-                fmt.Printf("not Ident %s\n", n.Object)
-            }
-        }
+        key := fmt.Sprintf("%s.%s", staticType, n.Method.Ident)
         idx, found := cg.methodIndices[key]
         if !found {
-            fmt.Printf("MethodCall Not found %s %s,  targettype %s, currentclass %s\n", key, staticType, receiver.Type(),cg.currentClass)
             return constant.NewNull(types.NewPointer(types.I8))
         }
-        fmt.Println(cg.classPtrTypes[recType])
-        casted := cg.currentBlock.NewBitCast(receiver, cg.classPtrTypes[recType])
-        fmt.Printf("MethodCall %s (user-defined) %s\n", key, casted)
-        fmt.Printf("Vptr rectype %s classType %s casted %s\n",recType, cg.classTypes[recType],casted.String())
+
+        casted := cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType(staticType))
+
         vtPtr := cg.currentBlock.NewGetElementPtr(
             cg.classTypes[recType],
             casted,
