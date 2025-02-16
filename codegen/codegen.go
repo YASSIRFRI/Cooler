@@ -592,7 +592,6 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
         }
     }
 
-    // Add this class's own attributes
     for _, feat := range classNode.Features {
         if attr, ok := feat.(*parser.Attribute); ok {
             var attrType types.Type
@@ -761,8 +760,6 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
         parentLayout := cg.dispatchTableLayouts[classNode.Inherits]
         layout = append(layout, parentLayout...)
     }
-
-    // Add/override this class's methods
     for _, feat := range classNode.Features {
         if m, ok := feat.(*parser.Method); ok {
             found := false
@@ -780,14 +777,11 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
         }
     }
     cg.dispatchTableLayouts[classNode.Name] = layout
-
-    // Record method indices for dynamic call lookups
     for i, entry := range layout {
         key := fmt.Sprintf("%s.%s", classNode.Name, entry.Method)
         cg.methodIndices[key] = i
     }
 
-    // Build the actual global array
     commonSelfType := cg.getClassPtrType("Object")
     commonMethodFnType := types.NewFunc(commonSelfType, commonSelfType)
     commonMethodPtrType := types.NewPointer(commonMethodFnType)
@@ -860,7 +854,10 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                     constant.NewInt(types.I32, 0),
                     constant.NewInt(types.I32, int64(idx)),
                 )
-                return cg.currentBlock.NewLoad(ptr.ElemType, ptr)
+                key := fmt.Sprintf("%s.%s", cg.currentClass, n.Name)
+                attrType := cg.attributeTypeEnv[key]
+                llvmType := cg.getClassPtrType(attrType)
+                return cg.currentBlock.NewLoad(llvmType, ptr)
             }
         }
         return constant.NewNull(types.NewPointer(types.I8))
@@ -972,7 +969,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             cmp := cg.currentBlock.NewICmp(enum.IPredSLE, cg.unboxInt(left), cg.unboxInt(right))
             return cg.boxBool(cmp)
         case "=":
-            // handle Int, Bool, String specifically, else pointer compare
             if left.Type().Equal(cg.getClassPtrType("Int")) &&
                 right.Type().Equal(cg.getClassPtrType("Int")) {
                 eq := cg.currentBlock.NewICmp(enum.IPredEQ, cg.unboxInt(left), cg.unboxInt(right))
@@ -1038,10 +1034,8 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         rawPtr := cg.currentBlock.NewCall(mallocFn, sizeConst)
         objPtr := cg.currentBlock.NewBitCast(rawPtr, cg.getClassPtrType(className))
 
-        // Store vtable pointer in field0 if not built-in
         vtGlobal, ok := cg.dispatchTables[className]
         if ok {
-            // Convert the vtable global to i8*
             var vtableAsI8Ptr constant.Constant
             arrType, isArr := vtGlobal.Init.Type().(*types.ArrayType)
             if isArr {
