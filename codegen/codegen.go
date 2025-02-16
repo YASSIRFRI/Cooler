@@ -1147,11 +1147,15 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         cg.variableEnv = oldEnv
         return res
 
-   case *parser.MethodCall:
+    case *parser.MethodCall:
+        // Dynamic or static dispatch
         receiver := cg.genExpr(n.Object)
-        receiver = cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType(cg.currentClass))
-        staticType := receiver.Type().(*types.PointerType).ElemType.Name()
 
+        // For dispatch, treat it as an Object pointer initially
+        receiver = cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType("Object"))
+
+        // Figure out the static type we think the receiver has
+        staticType := cg.currentClass
         if id, ok := n.Object.(*parser.Ident); ok {
             if t, found := cg.variableTypeEnv[id.Name]; found {
                 staticType = t
@@ -1160,11 +1164,13 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             staticType = newExpr.Type
         }
 
+        // Prepare arguments: first param is the self (receiver)
         args := []value.Value{receiver}
         for _, p := range n.Method.Params {
             args = append(args, cg.genExpr(p))
         }
 
+        // If built-in class, see if there's a direct built-in function
         if isBuiltIn(staticType) {
             fnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
             builtinFn := findFuncByName(cg.module, fnName)
@@ -1207,20 +1213,23 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         casted := cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType(staticType))
 
         vtPtr := cg.currentBlock.NewGetElementPtr(
-            cg.classTypes[recType],
+            cg.classTypes[staticType],
             casted,
             constant.NewInt(types.I32, 0),
             constant.NewInt(types.I32, 0),
         )
+        // vtPtr is now i8**. Load i8* from it:
         vtField := cg.currentBlock.NewLoad(types.NewPointer(types.I8), vtPtr)
-        layout := cg.dispatchTableLayouts[recType]
+
+        // bitcast i8* => [N x fn ptr]* so we can do a GEP on the array
+        layout := cg.dispatchTableLayouts[staticType]
         commonSelfType := cg.getClassPtrType("Object")
         commonMethodFnType := types.NewFunc(commonSelfType, commonSelfType)
         commonMethodPtrType := types.NewPointer(commonMethodFnType)
         arrType := types.NewArray(uint64(len(layout)), commonMethodPtrType)
+
         vtablePtr := cg.currentBlock.NewBitCast(vtField, types.NewPointer(arrType))
-        fmt.Printf("Method Index %d, name %s\n",idx,key)
-        fmt.Println(cg.methodIndices)
+
         methodPtrPtr := cg.currentBlock.NewGetElementPtr(
             arrType,
             vtablePtr,
@@ -1228,18 +1237,16 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             constant.NewInt(types.I32, int64(idx)),
         )
         methodPtr := cg.currentBlock.NewLoad(commonMethodPtrType, methodPtrPtr)
-        staticFnName := fmt.Sprintf("%s_%s", recType, n.Method.Ident)
+
+        // bitcast to the actual function type
+        staticFnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
         staticFn := findFuncByName(cg.module, staticFnName)
         if staticFn == nil {
-            fmt.Printf("MethodCall Not found %s %s\n", staticFnName, methodPtr)
             return constant.NewNull(types.NewPointer(types.I8))
         }
-        fmt.Printf("MethodCall %s (user-defined) %s method ptr\n", staticFnName, methodPtr)
         castedFn := cg.currentBlock.NewBitCast(methodPtr, staticFn.Type())
-        fmt.Printf("Calling function %s\n ", casted)
-        function:=cg.currentBlock.NewCall(castedFn, args...)
-        fmt.Printf("Calling function %s\n ", function.Name())
-        return function
+
+        return cg.currentBlock.NewCall(castedFn, args...)
 
     case *parser.FunctionCall:
         // E.g. out_string(...)
