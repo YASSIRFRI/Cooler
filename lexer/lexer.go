@@ -8,17 +8,17 @@ import (
 )
 
 type Token struct {
-	Type  string     
+	Type  string
 	Value interface{}
 	Line  int
 }
 
 type Lexer struct {
-	input        string 
-	pos          int   
-	line         int   
+	input        string
+	pos          int
+	line         int
 	state        string
-	commentCount int  
+	commentCount int
 }
 
 var reserved = map[string]string{
@@ -52,11 +52,9 @@ func NewLexer(input string) *Lexer {
 
 func (lx *Lexer) nextToken() *Token {
 	lx.skipWhitespace()
-
 	if lx.pos >= len(lx.input) {
 		return nil
 	}
-
 	if lx.state == "COMMENT" {
 		lx.skipComment()
 		lx.skipWhitespace()
@@ -65,7 +63,7 @@ func (lx *Lexer) nextToken() *Token {
 		}
 	}
 
-	for (strings.HasPrefix(lx.input[lx.pos:], "(*")) {
+	for strings.HasPrefix(lx.input[lx.pos:], "(*") {
 		lx.state = "COMMENT"
 		lx.pos += 2
 		lx.skipComment()
@@ -75,22 +73,12 @@ func (lx *Lexer) nextToken() *Token {
 		}
 	}
 
-	if strings.HasPrefix(lx.input[lx.pos:], "--") {
+	for strings.HasPrefix(lx.input[lx.pos:], "--") {
 		lx.skipSingleLineComment()
 		lx.skipWhitespace()
 		if lx.pos >= len(lx.input) {
 			return nil
 		}
-	}
-
-	for (strings.HasPrefix(lx.input[lx.pos:], "(*")) {
-			lx.state = "COMMENT"
-			lx.pos += 2
-			lx.skipComment()
-			lx.skipWhitespace()
-			if lx.pos >= len(lx.input) {
-				return nil
-			}
 	}
 
 	if m, text := lx.matchRegex(`^[0-9]+`); m {
@@ -119,7 +107,7 @@ func (lx *Lexer) nextToken() *Token {
 		return &Token{Type: "TYPE", Value: text, Line: lx.line}
 	}
 
-	// 6. ID: [a-z][A-Za-z0-9_]* update the regex to include underscore
+	// ID: [a-z][A-Za-z0-9_]* (underscores allowed)
 	if m, text := lx.matchRegex(`^[a-z_][A-Za-z0-9_]*`); m {
 		lx.pos += len(text)
 		if t, ok := reserved[strings.ToLower(text)]; ok {
@@ -158,7 +146,7 @@ func (lx *Lexer) nextToken() *Token {
 	case '~':
 		lx.pos++
 		return &Token{Type: "INT_COMP", Value: "~", Line: lx.line}
-	case '<': 
+	case '<':
 		lx.pos++
 		return &Token{Type: "LT", Value: "<", Line: lx.line}
 	case '=':
@@ -263,7 +251,6 @@ func toInt(s string) int {
 	fmt.Sscanf(s, "%d", &n)
 	return n
 }
-
 
 func (lx *Lexer) NextToken() *Token {
 	return lx.nextToken()

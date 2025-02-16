@@ -1201,22 +1201,17 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                     return constant.NewNull(types.NewPointer(types.I8))
                 }
             }
-            // direct built-in call
             return cg.currentBlock.NewCall(builtinFn, args...)
         }
 
-        // Otherwise, do dynamic dispatch
         key := fmt.Sprintf("%s.%s", staticType, n.Method.Ident)
         idx, found := cg.methodIndices[key]
         if !found {
-            // fallback
             return constant.NewNull(types.NewPointer(types.I8))
         }
 
-        // We have a pointer to e.g. %SomeClass_struct
         casted := cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType(staticType))
 
-        // *** FIX: load as i8* explicitly from field 0, not the entire struct
         vtPtr := cg.currentBlock.NewGetElementPtr(
             cg.classTypes[staticType],
             casted,
