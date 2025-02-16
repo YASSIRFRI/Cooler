@@ -1149,14 +1149,11 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         cg.variableEnv = oldEnv
         return res
 
-    // *** FIX *** - We do *not* cast the receiver to `currentClass` - we figure out the static type from variableTypeEnv/attributeTypeEnv
     case *parser.MethodCall:
         receiverVal := cg.genExpr(n.Object)
 
-        // Attempt to find the static type of the receiver from either local var or attribute env
         var staticType string
         if objIdent, ok := n.Object.(*parser.Ident); ok {
-            // Check local var type env
             if t, found := cg.variableTypeEnv[objIdent.Name]; found {
                 staticType = t
             } else {
@@ -1185,37 +1182,37 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             args = append(args, argVal)
         }
 
-        // If it's a built-in string method, short-circuit
         if isBuiltIn(staticType) {
+            if staticType == "String" {
+                switch n.Method.Ident {
+                case "length":
+                    lengthFn := findFuncByName(cg.module, "String_length")
+                    if lengthFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    i32val := cg.currentBlock.NewCall(lengthFn, receiverVal)
+                    return cg.boxInt(i32val)
+                case "concat":
+                    concatFn := findFuncByName(cg.module, "String_concat")
+                    if concatFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    // The second param is args[1]
+                    return cg.currentBlock.NewCall(concatFn, receiverVal, args[1])
+                case "substr":
+                    substrFn := findFuncByName(cg.module, "String_substr")
+                    if substrFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    // The second and third params are args[1], args[2]
+                    return cg.currentBlock.NewCall(substrFn, receiverVal, args[1], args[2])
+                }
+            }
             fnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
             builtinFn := findFuncByName(cg.module, fnName)
             if builtinFn == nil {
                 // Possibly handle known string methods
-                if staticType == "String" {
-                    switch n.Method.Ident {
-                    case "length":
-                        lengthFn := findFuncByName(cg.module, "String_length")
-                        if lengthFn == nil {
-                            return constant.NewNull(types.NewPointer(types.I8))
-                        }
-                        i32val := cg.currentBlock.NewCall(lengthFn, receiverVal)
-                        return cg.boxInt(i32val)
-                    case "concat":
-                        concatFn := findFuncByName(cg.module, "String_concat")
-                        if concatFn == nil {
-                            return constant.NewNull(types.NewPointer(types.I8))
-                        }
-                        // The second param is args[1]
-                        return cg.currentBlock.NewCall(concatFn, receiverVal, args[1])
-                    case "substr":
-                        substrFn := findFuncByName(cg.module, "String_substr")
-                        if substrFn == nil {
-                            return constant.NewNull(types.NewPointer(types.I8))
-                        }
-                        // The second and third params are args[1], args[2]
-                        return cg.currentBlock.NewCall(substrFn, receiverVal, args[1], args[2])
-                    }
-                }
+
                 // no known built-in
                 return constant.NewNull(types.NewPointer(types.I8))
             }

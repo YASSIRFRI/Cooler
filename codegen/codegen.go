@@ -1,4 +1,3 @@
-// package codegen
 package codegen
 
 import (
@@ -702,7 +701,6 @@ func (cg *CodeGenerator) generateMethodBodies(classNode *parser.Class) {
                 if i > 0 && i-1 < len(method.Formals) {
                     cg.variableTypeEnv[param.LocalName] = method.Formals[i-1].Type
                 } else if i == 0 {
-                    // store "self" in a properly bitcasted alloca
                     selfVal := cg.currentBlock.NewLoad(alloca.ElemType, alloca)
                     castedSelf := cg.currentBlock.NewBitCast(selfVal, cg.getClassPtrType(classNode.Name))
                     newAlloca := cg.currentBlock.NewAlloca(castedSelf.Type())
@@ -857,44 +855,32 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                 return cg.currentBlock.NewLoad(ptr.ElemType, ptr)
             }
         }
-        // fallback
         return constant.NewNull(types.NewPointer(types.I8))
 
     case *parser.Assignment:
         val := cg.genExpr(n.Expr)
-        // local var?
-        if alloca, ok := cg.variableEnv[n.Ident.Name]; ok {
-            // Possibly cast
-            if !val.Type().Equal(alloca.ElemType) {
-                val = cg.currentBlock.NewBitCast(val, alloca.ElemType)
-            }
+        lhsName := n.Ident.Name
+        if alloca, ok := cg.variableEnv[lhsName]; ok {
             cg.currentBlock.NewStore(val, alloca)
             return val
         }
         if cg.currentClass != "" {
-            key := fmt.Sprintf("%s.%s", cg.currentClass, n.Ident.Name)
+            key := fmt.Sprintf("%s.%s", cg.currentClass, lhsName)
             if idx, found := cg.attributeIndices[key]; found {
-                selfAlloca, ok2 := cg.variableEnv["self"]
-                if !ok2 {
-                    return val
-                }
+                selfAlloca := cg.variableEnv["self"]
                 selfVal := cg.currentBlock.NewLoad(selfAlloca.ElemType, selfAlloca)
-                casted := cg.currentBlock.NewBitCast(selfVal, cg.getClassPtrType(cg.currentClass))
                 fieldPtr := cg.currentBlock.NewGetElementPtr(
-                    cg.classTypes[cg.currentClass],
-                    casted,
-                    constant.NewInt(types.I32, 0),
+                    val.Type(),
+                    selfVal,
                     constant.NewInt(types.I32, int64(idx)),
                 )
-                if !val.Type().Equal(fieldPtr.ElemType) {
-                    val = cg.currentBlock.NewBitCast(val, fieldPtr.ElemType)
-                }
                 cg.currentBlock.NewStore(val, fieldPtr)
                 return val
             }
         }
+
         alloca := cg.currentBlock.NewAlloca(val.Type())
-        cg.variableEnv[n.Ident.Name] = alloca
+        cg.variableEnv[lhsName] = alloca
         cg.currentBlock.NewStore(val, alloca)
         return val
 
@@ -990,7 +976,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                 return cg.boxBool(eq)
             }
             if left.Type().Equal(cg.stringType) && right.Type().Equal(cg.stringType) {
-                // Compare the underlying i8*
                 lPtrPtr := cg.currentBlock.NewGetElementPtr(
                     cg.stringStruct, left,
                     constant.NewInt(types.I32, 0),
@@ -1069,14 +1054,12 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         return objPtr
 
     case *parser.Let:
-        // Create new local variable environment scope
         oldEnv := cg.variableEnv
         newEnv := make(map[string]*ir.InstAlloca)
         for k, v := range oldEnv {
             newEnv[k] = v
         }
         cg.variableEnv = newEnv
-
         oldTypeEnv := cg.variableTypeEnv
         newTypeEnv := make(map[string]string)
         for k, v := range oldTypeEnv {
@@ -1148,10 +1131,8 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         return res
 
     case *parser.MethodCall:
-        // Dynamic or static dispatch
         receiver := cg.genExpr(n.Object)
 
-        // For dispatch, treat it as an Object pointer initially
         receiver = cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType("Object"))
 
         // Figure out the static type we think the receiver has
@@ -1363,7 +1344,6 @@ func (cg *CodeGenerator) genCallInString() value.Value {
     )
     cg.currentBlock.NewCall(cg.scanfFunc, fmtPtr, ptr)
 
-    // Now build a new String object on the heap
     mallocFn := findFuncByName(cg.module, "malloc")
     sizeStringObj := constant.NewInt(types.I64, cg.typeSize(cg.stringStruct))
     newStringObjRaw := cg.currentBlock.NewCall(mallocFn, sizeStringObj)

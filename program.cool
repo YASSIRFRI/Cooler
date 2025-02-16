@@ -1,59 +1,23 @@
-(* COOL Program Demonstrating Method Overriding *)
-
-class Animal {
-    speak() : String {
-        "I am an animal.\n"
-    };
-};
-
-class Dog inherits Animal {
-    speak() : String {
-        "Woof!\n"
-    };
-};
-
-class Cat inherits Animal {
-    speak() : String {
-        "Meow!\n"
-    };
-};
-
-
-class Bird inherits Dog {
-    speak() : String {
-        "Chirp!\n"
-    };
-};
-
-class Fish inherits Cat {
-    speak() : String {
-        "Blub blub!\n"
-    };
-};
-
-class Parrot inherits Bird {
-    speak() : String {
-        "Polly wants a cracker!\n"
-    };
-};
-
-class Goldfish inherits Fish {
-    speak() : String {
-        "Glub glub!\n"
-    };
-};
-
-
-class Main inherits IO{
-    main() : Object {
-        let animal : Animal <- new Animal,
-            dog : Animal    <- new Dog,
-            cat : Animal    <- new Cat,
-            bird : Bird     <- new Bird
+class Main inherits IO {
+    main(): Object {
+        let str1 : String <- "Hello, ",
+            str2 : String <- "world!",
+            str3 : String <- "Cool programming language" 
         in {
-            out_string(animal.speak());
-            out_string(dog.speak());
-            out_string(cat.speak());
+            -- Test concat
+            out_string("Concatenation: ");
+            out_string(str1.concat(str2)); 
+            out_string("\n");
+
+            -- Test length
+            out_string("Length of str3: ");
+            out_int(str3.length());
+            out_string("\n");
+
+            -- Test substr
+            out_string("Substring of str3 (start: 5, length: 10): ");
+            out_string(str3.substr(5, 10)); 
+            out_string("\n");
         }
     };
 };
