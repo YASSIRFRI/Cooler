@@ -386,9 +386,11 @@ func (cg *CodeGenerator) declareMalloc() {
 // --------------------------------------------------------------------------
 func (cg *CodeGenerator) defineStringLength() {
     param := ir.NewParam("str", cg.stringType)
-    fn := cg.module.NewFunc("String_length", types.I32, param)
+    // Return an Int object, not i32:
+    fn := cg.module.NewFunc("String_length", cg.getClassPtrType("Int"), param)
     entry := fn.NewBlock("entry")
 
+    // Load the character pointer from our String object.
     charPtrPtr := entry.NewGetElementPtr(
         cg.stringStruct, fn.Params[0],
         constant.NewInt(types.I32, 0),
@@ -396,6 +398,7 @@ func (cg *CodeGenerator) defineStringLength() {
     )
     charPtr := entry.NewLoad(types.NewPointer(types.I8), charPtrPtr)
 
+    // We'll count how many non-zero bytes before '\0'
     counterAlloca := entry.NewAlloca(types.I32)
     entry.NewStore(constant.NewInt(types.I32, 0), counterAlloca)
 
@@ -416,7 +419,10 @@ func (cg *CodeGenerator) defineStringLength() {
     incBlock.NewBr(loopBlock)
 
     retVal := exitBlock.NewLoad(types.I32, counterAlloca)
-    exitBlock.NewRet(retVal)
+    fmt.Printf("RetVal %s Exitbloc %s intObj \n",retVal, exitBlock )
+    intObj:=cg.boxInt(retVal)
+    fmt.Printf("RetVal %s Exitbloc %s intObj %s\n",retVal, exitBlock)
+    exitBlock.NewRet(intObj)
 }
 
 func (cg *CodeGenerator) defineStringConcat() {
