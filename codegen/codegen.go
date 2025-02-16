@@ -385,12 +385,14 @@ func (cg *CodeGenerator) declareMalloc() {
 // Built‐in String Methods
 // --------------------------------------------------------------------------
 func (cg *CodeGenerator) defineStringLength() {
+    // Param: the String object (as i8* data is in field #1)
     param := ir.NewParam("str", cg.stringType)
-    // Return an Int object, not i32:
-    fn := cg.module.NewFunc("String_length", cg.getClassPtrType("Int"), param)
+
+    // **Return type is now i32**, not IntStruct*
+    fn := cg.module.NewFunc("String_length", types.I32, param)
     entry := fn.NewBlock("entry")
 
-    // Load the character pointer from our String object.
+    // GEP into the string struct to get the raw i8* pointer
     charPtrPtr := entry.NewGetElementPtr(
         cg.stringStruct, fn.Params[0],
         constant.NewInt(types.I32, 0),
@@ -398,7 +400,7 @@ func (cg *CodeGenerator) defineStringLength() {
     )
     charPtr := entry.NewLoad(types.NewPointer(types.I8), charPtrPtr)
 
-    // We'll count how many non-zero bytes before '\0'
+    // We'll count bytes until we see a '\0'
     counterAlloca := entry.NewAlloca(types.I32)
     entry.NewStore(constant.NewInt(types.I32, 0), counterAlloca)
 
@@ -419,11 +421,11 @@ func (cg *CodeGenerator) defineStringLength() {
     incBlock.NewBr(loopBlock)
 
     retVal := exitBlock.NewLoad(types.I32, counterAlloca)
-    fmt.Printf("RetVal %s Exitbloc %s intObj \n",retVal, exitBlock )
-    intObj:=cg.boxInt(retVal)
-    fmt.Printf("RetVal %s Exitbloc %s intObj %s\n",retVal, exitBlock)
-    exitBlock.NewRet(intObj)
+
+    // Directly return i32
+    exitBlock.NewRet(retVal)
 }
+
 
 func (cg *CodeGenerator) defineStringConcat() {
     s1 := ir.NewParam("str", cg.stringType)
@@ -1156,13 +1158,33 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         for _, p := range n.Method.Params {
             args = append(args, cg.genExpr(p))
         }
-
-        // If built-in class, see if there's a direct built-in function
         if isBuiltIn(staticType) {
+            if staticType == "String" {
+                switch n.Method.Ident {
+                case "length":
+                    lengthFn := findFuncByName(cg.module, "String_length")
+                    if lengthFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    i32val := cg.currentBlock.NewCall(lengthFn, args[0])
+                    return cg.boxInt(i32val)
+                case "concat":
+                    concatFn := findFuncByName(cg.module, "String_concat")
+                    if concatFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    return cg.currentBlock.NewCall(concatFn, args[0], args[1])
+                case "substr":
+                    substrFn := findFuncByName(cg.module, "String_substr")
+                    if substrFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    return cg.currentBlock.NewCall(substrFn, args[0], args[1], args[2])
+                }
+            }
             fnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
             builtinFn := findFuncByName(cg.module, fnName)
             if builtinFn == nil {
-                // fallback for known string methods
                 switch n.Method.Ident {
                 case "length":
                     lengthFn := findFuncByName(cg.module, "String_length")
@@ -1184,7 +1206,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                     }
                     return cg.currentBlock.NewCall(substrFn, args[0], args[1], args[2])
                 default:
-                    // no known built-in
                     return constant.NewNull(types.NewPointer(types.I8))
                 }
             }
