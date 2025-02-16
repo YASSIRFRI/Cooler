@@ -44,13 +44,14 @@ class Main inherits IO{
         dog : Animal    <- new Dog;
         cat : Animal    <- new Cat;
         bird : Animal     <- new Bird;
-    main() : IO {
-        {
-            out_string(animal.speak());
-            out_string(dog.speak());
-            out_string(cat.speak());
-            out_string(bird.speak());
-            out_string("test");
-        }
-    };
+        main() : Object {
+            {
+                out_string(animal.speak());
+                out_string(dog.speak());
+                out_string(cat.speak());
+                out_string(bird.speak());
+                out_string("test");
+            }
+        };
+
 };
