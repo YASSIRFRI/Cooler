@@ -562,75 +562,69 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
         return cg.classTypes[classNode.Name]
     }
 
-    // Start with [0] => i8* for vtable
+    // 1. Create opaque struct upfront if it doesn't exist
+    if _, exists := cg.classTypes[classNode.Name]; !exists {
+        opaqueStruct := types.NewStruct()
+        opaqueStruct.SetName(classNode.Name + "_struct")
+        cg.module.NewTypeDef(opaqueStruct.Name(), opaqueStruct)
+        cg.classTypes[classNode.Name] = opaqueStruct
+        cg.classPtrTypes[classNode.Name] = types.NewPointer(opaqueStruct)
+    }
+
+    // 2. Return existing struct if already processed
+    if st, ok := cg.classTypes[classNode.Name].(*types.StructType); ok && len(st.Fields) > 0 {
+        return st
+    }
+
     var fieldTypes []types.Type
     fieldTypes = append(fieldTypes, types.NewPointer(types.I8)) // vtable pointer
     index := 1
 
-    // If inherits from another user class, get parent's fields
     if classNode.Inherits != "" && !isBuiltIn(classNode.Inherits) {
         parentNode := classMap[classNode.Inherits]
         if parentNode != nil {
-            cg.createClassType(parentNode, classMap)
-        }
-        if parentStruct, ok := cg.classTypes[classNode.Inherits].(*types.StructType); ok {
-            if len(parentStruct.Fields) > 1 {
-                for i := 1; i < len(parentStruct.Fields); i++ {
-                    fieldTypes = append(fieldTypes, parentStruct.Fields[i])
+            // Recursively create parent type first
+            parentType := cg.createClassType(parentNode, classMap)
+            if parentStruct, ok := parentType.(*types.StructType); ok {
+                // Skip vtable field (index 0)
+                if len(parentStruct.Fields) > 1 {
+                    fieldTypes = append(fieldTypes, parentStruct.Fields[1:]...)
+                    index = len(fieldTypes)
                 }
-                index = len(fieldTypes)
-            }
-            // Copy parent's attribute indices
-            for key, idxVal := range cg.attributeIndices {
-                if strings.HasPrefix(key, classNode.Inherits+".") {
-                    attrName := key[len(classNode.Inherits)+1:]
-                    newKey := fmt.Sprintf("%s.%s", classNode.Name, attrName)
-                    cg.attributeIndices[newKey] = idxVal
-                    cg.attributeTypeEnv[newKey] = cg.attributeTypeEnv[key]
+                // Copy parent's attribute indices
+                for key, idxVal := range cg.attributeIndices {
+                    if strings.HasPrefix(key, classNode.Inherits+".") {
+                        attrName := key[len(classNode.Inherits)+1:]
+                        newKey := fmt.Sprintf("%s.%s", classNode.Name, attrName)
+                        cg.attributeIndices[newKey] = idxVal
+                        cg.attributeTypeEnv[newKey] = cg.attributeTypeEnv[key]
+                    }
                 }
             }
         }
     }
 
+    // 4. Process attributes with proper forward references
     for _, feat := range classNode.Features {
         if attr, ok := feat.(*parser.Attribute); ok {
-            var attrType types.Type
-            switch attr.Type {
-            case "Int":
-                attrType = cg.getClassPtrType("Int")
-            case "String":
-                attrType = cg.stringType
-            case "Bool":
-                attrType = cg.getClassPtrType("Bool")
-            default:
-                if _, exists := cg.classTypes[attr.Type]; exists {
-                    attrType = cg.getClassPtrType(attr.Type)
-                } else {
-                    attrType = cg.getClassPtrType("Object")
-                }
-            }
             key := fmt.Sprintf("%s.%s", classNode.Name, attr.Ident)
+            
+            // Get actual type using classPtrTypes (handles forward references)
+            attrType := cg.getClassPtrType(attr.Type)
+            
             if _, exists := cg.attributeIndices[key]; !exists {
                 cg.attributeIndices[key] = index
                 cg.attributeTypeEnv[key] = attr.Type
                 fieldTypes = append(fieldTypes, attrType)
                 index++
-            } else {
-                fieldTypes[cg.attributeIndices[key]] = attrType
             }
         }
     }
 
-    userStruct, ok := cg.classTypes[classNode.Name].(*types.StructType)
-    if !ok {
-        userStruct = types.NewStruct(fieldTypes...)
-        userStruct.SetName(classNode.Name + "_struct")
-        cg.module.NewTypeDef(userStruct.Name(), userStruct)
-        cg.classTypes[classNode.Name] = userStruct
-    } else {
-        userStruct.Fields = fieldTypes
-        userStruct.SetName(classNode.Name + "_struct")
-    }
+    // 5. Update the opaque struct with actual fields
+    userStruct := cg.classTypes[classNode.Name].(*types.StructType)
+    userStruct.Fields = fieldTypes
+    
     return userStruct
 }
 
@@ -1134,7 +1128,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 
     case *parser.MethodCall:
         receiver := cg.genExpr(n.Object)
-
+        fmt.Printf("Receiver for method call %s of type %s\n",n.Object,n.TargetType)
         receiver = cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType("Object"))
 
         // Figure out the static type we think the receiver has
@@ -1142,6 +1136,11 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         if id, ok := n.Object.(*parser.Ident); ok {
             if t, found := cg.variableTypeEnv[id.Name]; found {
                 staticType = t
+            }else{
+                attrKey := fmt.Sprintf("%s.%s", cg.currentClass, id.Name)
+                if attrType, foundAttr := cg.attributeTypeEnv[attrKey]; foundAttr {
+                    staticType = attrType
+                }
             }
         } else if newExpr, ok := n.Object.(*parser.New); ok {
             staticType = newExpr.Type
