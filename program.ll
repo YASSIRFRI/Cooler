@@ -21,9 +21,9 @@
 @str_obj_1 = constant { i8* } { [8 x i8]* getelementptr inbounds ([8 x i8], [8 x i8]* @str_0) }
 @str_2 = global [8 x i8] c"Test 3\0A\00"
 @str_obj_3 = constant { i8* } { [8 x i8]* getelementptr inbounds ([8 x i8], [8 x i8]* @str_2) }
-@str_4 = global [2 x i8] c"\0A\00"
-@str_obj_5 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_4) }
-@str_6 = global [2 x i8] c"X\00"
+@str_4 = global [8 x i8] c"Test 4\0A\00"
+@str_obj_5 = constant { i8* } { [8 x i8]* getelementptr inbounds ([8 x i8], [8 x i8]* @str_4) }
+@str_6 = global [2 x i8] c"\0A\00"
 @str_obj_7 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_6) }
 @str_8 = global [2 x i8] c"X\00"
 @str_obj_9 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_8) }
@@ -31,16 +31,18 @@
 @str_obj_11 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_10) }
 @str_12 = global [2 x i8] c"X\00"
 @str_obj_13 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_12) }
-@str_14 = global [2 x i8] c".\00"
+@str_14 = global [2 x i8] c"X\00"
 @str_obj_15 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_14) }
-@str_16 = global [1 x i8] c"\00"
-@str_obj_17 = constant { i8* } { [1 x i8]* getelementptr inbounds ([1 x i8], [1 x i8]* @str_16) }
-@str_18 = global [7 x i8] c"Test1\0A\00"
-@str_obj_19 = constant { i8* } { [7 x i8]* getelementptr inbounds ([7 x i8], [7 x i8]* @str_18) }
-@str_20 = global [7 x i8] c"Test4\0A\00"
+@str_16 = global [2 x i8] c".\00"
+@str_obj_17 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_16) }
+@str_18 = global [1 x i8] c"\00"
+@str_obj_19 = constant { i8* } { [1 x i8]* getelementptr inbounds ([1 x i8], [1 x i8]* @str_18) }
+@str_20 = global [7 x i8] c"Test1\0A\00"
 @str_obj_21 = constant { i8* } { [7 x i8]* getelementptr inbounds ([7 x i8], [7 x i8]* @str_20) }
-@str_22 = global [20 x i8] c"         X         \00"
+@str_22 = global [20 x i8] c"XXXXXXXXXXXXXXXXXXX\00"
 @str_obj_23 = constant { i8* } { [20 x i8]* getelementptr inbounds ([20 x i8], [20 x i8]* @str_22) }
+@str_24 = global [2 x i8] c"T\00"
+@str_obj_25 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_24) }
 
 declare i32 @printf(i8* nocapture %fmt, ...)
 
@@ -179,19 +181,24 @@ entry:
 	%2 = bitcast %ObjectStruct* %1 to %CellularAutomaton_struct*
 	%3 = alloca %CellularAutomaton_struct*
 	store %CellularAutomaton_struct* %2, %CellularAutomaton_struct** %3
-	%4 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %3
-	%5 = bitcast %CellularAutomaton_struct* %4 to %CellularAutomaton_struct*
-	%6 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %5, i32 0, i32 1
-	%7 = load %StringStruct*, %StringStruct** %6
-	%8 = bitcast %StringStruct* %7 to %ObjectStruct*
-	%9 = call %StringStruct* @String_concat(%ObjectStruct* %8, %StringStruct* bitcast ({ i8* }* @str_obj_5 to %StringStruct*))
-	%10 = getelementptr %StringStruct, %StringStruct* %9, i32 0, i32 0
-	%11 = load i8*, i8** %10
-	%12 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%13 = call i32 (i8*, ...) @printf(i8* %12, i8* %11)
-	%14 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %3
-	%15 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %3
-	ret %CellularAutomaton_struct* %15
+	%4 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_5 to %StringStruct*), i32 0, i32 0
+	%5 = load i8*, i8** %4
+	%6 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%7 = call i32 (i8*, ...) @printf(i8* %6, i8* %5)
+	%8 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %3
+	%9 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %3
+	%10 = bitcast %CellularAutomaton_struct* %9 to %CellularAutomaton_struct*
+	%11 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %10, i32 0, i32 1
+	%12 = load %StringStruct*, %StringStruct** %11
+	%13 = bitcast %StringStruct* %12 to %ObjectStruct*
+	%14 = call %StringStruct* @String_concat(%ObjectStruct* %13, %StringStruct* bitcast ({ i8* }* @str_obj_7 to %StringStruct*))
+	%15 = getelementptr %StringStruct, %StringStruct* %14, i32 0, i32 0
+	%16 = load i8*, i8** %15
+	%17 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%18 = call i32 (i8*, ...) @printf(i8* %17, i8* %16)
+	%19 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %3
+	%20 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %3
+	ret %CellularAutomaton_struct* %20
 }
 
 define %IntStruct* @CellularAutomaton_num_cells(%ObjectStruct* %self) {
@@ -400,7 +407,7 @@ entry:
 	%7 = call %StringStruct* @CellularAutomaton_cell(%CellularAutomaton_struct* %5, %IntStruct* %6)
 	%8 = getelementptr %StringStruct, %StringStruct* %7, i32 0, i32 1
 	%9 = load i8*, i8** %8
-	%10 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_7 to %StringStruct*), i32 0, i32 1
+	%10 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_9 to %StringStruct*), i32 0, i32 1
 	%11 = load i8*, i8** %10
 	%12 = icmp eq i8* %9, %11
 	%13 = call i8* @malloc(i64 16)
@@ -433,7 +440,7 @@ if_end_8:
 	%28 = call %StringStruct* @CellularAutomaton_cell_left_neighbor(%CellularAutomaton_struct* %26, %IntStruct* %27)
 	%29 = getelementptr %StringStruct, %StringStruct* %28, i32 0, i32 1
 	%30 = load i8*, i8** %29
-	%31 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_9 to %StringStruct*), i32 0, i32 1
+	%31 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_11 to %StringStruct*), i32 0, i32 1
 	%32 = load i8*, i8** %31
 	%33 = icmp eq i8* %30, %32
 	%34 = call i8* @malloc(i64 16)
@@ -475,7 +482,7 @@ if_end_11:
 	%57 = call %StringStruct* @CellularAutomaton_cell_right_neighbor(%CellularAutomaton_struct* %55, %IntStruct* %56)
 	%58 = getelementptr %StringStruct, %StringStruct* %57, i32 0, i32 1
 	%59 = load i8*, i8** %58
-	%60 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_11 to %StringStruct*), i32 0, i32 1
+	%60 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_13 to %StringStruct*), i32 0, i32 1
 	%61 = load i8*, i8** %60
 	%62 = icmp eq i8* %59, %61
 	%63 = call i8* @malloc(i64 16)
@@ -537,7 +544,7 @@ if_else_16:
 	br label %if_end_17
 
 if_end_17:
-	%98 = phi %StringStruct* [ bitcast ({ i8* }* @str_obj_13 to %StringStruct*), %if_then_15 ], [ bitcast ({ i8* }* @str_obj_15 to %StringStruct*), %if_else_16 ]
+	%98 = phi %StringStruct* [ bitcast ({ i8* }* @str_obj_15 to %StringStruct*), %if_then_15 ], [ bitcast ({ i8* }* @str_obj_17 to %StringStruct*), %if_else_16 ]
 	ret %StringStruct* %98
 }
 
@@ -560,7 +567,7 @@ entry:
 	%10 = call %IntStruct* @CellularAutomaton_num_cells(%CellularAutomaton_struct* %9)
 	store %IntStruct* %10, %IntStruct** %8
 	%11 = alloca %StringStruct*
-	store %StringStruct* bitcast ({ i8* }* @str_obj_17 to %StringStruct*), %StringStruct** %11
+	store %StringStruct* bitcast ({ i8* }* @str_obj_19 to %StringStruct*), %StringStruct** %11
 	br label %while_cond
 
 while_cond:
@@ -622,7 +629,7 @@ entry:
 	%2 = bitcast %ObjectStruct* %1 to %Main_struct*
 	%3 = alloca %Main_struct*
 	store %Main_struct* %2, %Main_struct** %3
-	%4 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_19 to %StringStruct*), i32 0, i32 0
+	%4 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_21 to %StringStruct*), i32 0, i32 0
 	%5 = load i8*, i8** %4
 	%6 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
 	%7 = call i32 (i8*, ...) @printf(i8* %6, i8* %5)
@@ -631,113 +638,109 @@ entry:
 	%10 = bitcast i8* %9 to %CellularAutomaton_struct*
 	%11 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %10, i32 0, i32 0
 	store i8* bitcast ([8 x %ObjectStruct* (%ObjectStruct*)*]* bitcast ([8 x %ObjectStruct* (%ObjectStruct*)*]* @vtable_CellularAutomaton to [8 x %ObjectStruct* (%ObjectStruct*)*]*) to i8*), i8** %11
-	%12 = load %Main_struct*, %Main_struct** %3
-	%13 = getelementptr %CellularAutomaton_struct*, %Main_struct* %12, i32 1
-	store %CellularAutomaton_struct* %10, %CellularAutomaton_struct** %13
-	%14 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_21 to %StringStruct*), i32 0, i32 0
+	%12 = bitcast %CellularAutomaton_struct* %10 to %ObjectStruct*
+	%13 = bitcast %ObjectStruct* %12 to %CellularAutomaton_struct*
+	%14 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %13, i32 0, i32 0
 	%15 = load i8*, i8** %14
-	%16 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%17 = call i32 (i8*, ...) @printf(i8* %16, i8* %15)
-	%18 = load %Main_struct*, %Main_struct** %3
-	%19 = load %Main_struct*, %Main_struct** %3
-	%20 = bitcast %Main_struct* %19 to %Main_struct*
-	%21 = getelementptr %Main_struct, %Main_struct* %20, i32 0, i32 1
-	%22 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %21
-	%23 = bitcast %CellularAutomaton_struct* %22 to %ObjectStruct*
-	%24 = bitcast %ObjectStruct* %23 to %CellularAutomaton_struct*
-	%25 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %24, i32 0, i32 0
-	%26 = load i8*, i8** %25
-	%27 = bitcast i8* %26 to [8 x %ObjectStruct* (%ObjectStruct*)*]*
-	%28 = getelementptr [8 x %ObjectStruct* (%ObjectStruct*)*], [8 x %ObjectStruct* (%ObjectStruct*)*]* %27, i32 0, i32 0
-	%29 = load %ObjectStruct* (%ObjectStruct*)*, %ObjectStruct* (%ObjectStruct*)** %28
-	%30 = bitcast %ObjectStruct* (%ObjectStruct*)* %29 to %CellularAutomaton_struct* (%ObjectStruct*, %StringStruct*)*
-	%31 = call %CellularAutomaton_struct* %30(%ObjectStruct* %23, %StringStruct* bitcast ({ i8* }* @str_obj_23 to %StringStruct*))
-	%32 = load %Main_struct*, %Main_struct** %3
-	%33 = bitcast %Main_struct* %32 to %Main_struct*
-	%34 = getelementptr %Main_struct, %Main_struct* %33, i32 0, i32 1
-	%35 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %34
-	%36 = bitcast %CellularAutomaton_struct* %35 to %ObjectStruct*
-	%37 = bitcast %ObjectStruct* %36 to %CellularAutomaton_struct*
-	%38 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %37, i32 0, i32 0
-	%39 = load i8*, i8** %38
-	%40 = bitcast i8* %39 to [8 x %ObjectStruct* (%ObjectStruct*)*]*
-	%41 = getelementptr [8 x %ObjectStruct* (%ObjectStruct*)*], [8 x %ObjectStruct* (%ObjectStruct*)*]* %40, i32 0, i32 1
-	%42 = load %ObjectStruct* (%ObjectStruct*)*, %ObjectStruct* (%ObjectStruct*)** %41
-	%43 = bitcast %ObjectStruct* (%ObjectStruct*)* %42 to %CellularAutomaton_struct* (%ObjectStruct*)*
-	%44 = call %CellularAutomaton_struct* %43(%ObjectStruct* %36)
-	%45 = alloca %IntStruct*
-	%46 = call i8* @malloc(i64 16)
-	%47 = bitcast i8* %46 to %IntStruct*
-	%48 = getelementptr %IntStruct, %IntStruct* %47, i32 0, i32 1
-	store i32 20, i32* %48
-	store %IntStruct* %47, %IntStruct** %45
+	%16 = bitcast i8* %15 to [8 x %ObjectStruct* (%ObjectStruct*)*]*
+	%17 = getelementptr [8 x %ObjectStruct* (%ObjectStruct*)*], [8 x %ObjectStruct* (%ObjectStruct*)*]* %16, i32 0, i32 0
+	%18 = load %ObjectStruct* (%ObjectStruct*)*, %ObjectStruct* (%ObjectStruct*)** %17
+	%19 = bitcast %ObjectStruct* (%ObjectStruct*)* %18 to %CellularAutomaton_struct* (%ObjectStruct*, %StringStruct*)*
+	%20 = call %CellularAutomaton_struct* %19(%ObjectStruct* %12, %StringStruct* bitcast ({ i8* }* @str_obj_23 to %StringStruct*))
+	%21 = load %Main_struct*, %Main_struct** %3
+	%22 = getelementptr %CellularAutomaton_struct*, %Main_struct* %21, i32 1
+	store %CellularAutomaton_struct* %20, %CellularAutomaton_struct** %22
+	%23 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_25 to %StringStruct*), i32 0, i32 0
+	%24 = load i8*, i8** %23
+	%25 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%26 = call i32 (i8*, ...) @printf(i8* %25, i8* %24)
+	%27 = load %Main_struct*, %Main_struct** %3
+	%28 = load %Main_struct*, %Main_struct** %3
+	%29 = bitcast %Main_struct* %28 to %Main_struct*
+	%30 = getelementptr %Main_struct, %Main_struct* %29, i32 0, i32 1
+	%31 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %30
+	%32 = bitcast %CellularAutomaton_struct* %31 to %ObjectStruct*
+	%33 = bitcast %ObjectStruct* %32 to %CellularAutomaton_struct*
+	%34 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %33, i32 0, i32 0
+	%35 = load i8*, i8** %34
+	%36 = bitcast i8* %35 to [8 x %ObjectStruct* (%ObjectStruct*)*]*
+	%37 = getelementptr [8 x %ObjectStruct* (%ObjectStruct*)*], [8 x %ObjectStruct* (%ObjectStruct*)*]* %36, i32 0, i32 1
+	%38 = load %ObjectStruct* (%ObjectStruct*)*, %ObjectStruct* (%ObjectStruct*)** %37
+	%39 = bitcast %ObjectStruct* (%ObjectStruct*)* %38 to %CellularAutomaton_struct* (%ObjectStruct*)*
+	%40 = call %CellularAutomaton_struct* %39(%ObjectStruct* %32)
+	%41 = alloca %IntStruct*
+	%42 = call i8* @malloc(i64 16)
+	%43 = bitcast i8* %42 to %IntStruct*
+	%44 = getelementptr %IntStruct, %IntStruct* %43, i32 0, i32 1
+	store i32 20, i32* %44
+	store %IntStruct* %43, %IntStruct** %41
 	br label %while_cond
 
 while_cond:
-	%49 = call i8* @malloc(i64 16)
-	%50 = bitcast i8* %49 to %IntStruct*
-	%51 = getelementptr %IntStruct, %IntStruct* %50, i32 0, i32 1
-	store i32 0, i32* %51
-	%52 = load %IntStruct*, %IntStruct** %45
-	%53 = getelementptr %IntStruct, %IntStruct* %50, i32 0, i32 1
-	%54 = load i32, i32* %53
-	%55 = getelementptr %IntStruct, %IntStruct* %52, i32 0, i32 1
-	%56 = load i32, i32* %55
-	%57 = icmp slt i32 %54, %56
-	%58 = call i8* @malloc(i64 16)
-	%59 = bitcast i8* %58 to %BoolStruct*
-	%60 = getelementptr %BoolStruct, %BoolStruct* %59, i32 0, i32 1
-	store i1 %57, i1* %60
-	%61 = getelementptr %BoolStruct, %BoolStruct* %59, i32 0, i32 1
-	%62 = load i1, i1* %61
-	%63 = icmp ne i1 %62, false
-	br i1 %63, label %while_body, label %while_end
+	%45 = call i8* @malloc(i64 16)
+	%46 = bitcast i8* %45 to %IntStruct*
+	%47 = getelementptr %IntStruct, %IntStruct* %46, i32 0, i32 1
+	store i32 0, i32* %47
+	%48 = load %IntStruct*, %IntStruct** %41
+	%49 = getelementptr %IntStruct, %IntStruct* %46, i32 0, i32 1
+	%50 = load i32, i32* %49
+	%51 = getelementptr %IntStruct, %IntStruct* %48, i32 0, i32 1
+	%52 = load i32, i32* %51
+	%53 = icmp slt i32 %50, %52
+	%54 = call i8* @malloc(i64 16)
+	%55 = bitcast i8* %54 to %BoolStruct*
+	%56 = getelementptr %BoolStruct, %BoolStruct* %55, i32 0, i32 1
+	store i1 %53, i1* %56
+	%57 = getelementptr %BoolStruct, %BoolStruct* %55, i32 0, i32 1
+	%58 = load i1, i1* %57
+	%59 = icmp ne i1 %58, false
+	br i1 %59, label %while_body, label %while_end
 
 while_body:
-	%64 = load %Main_struct*, %Main_struct** %3
-	%65 = bitcast %Main_struct* %64 to %Main_struct*
-	%66 = getelementptr %Main_struct, %Main_struct* %65, i32 0, i32 1
-	%67 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %66
-	%68 = bitcast %CellularAutomaton_struct* %67 to %ObjectStruct*
-	%69 = bitcast %ObjectStruct* %68 to %CellularAutomaton_struct*
-	%70 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %69, i32 0, i32 0
-	%71 = load i8*, i8** %70
-	%72 = bitcast i8* %71 to [8 x %ObjectStruct* (%ObjectStruct*)*]*
-	%73 = getelementptr [8 x %ObjectStruct* (%ObjectStruct*)*], [8 x %ObjectStruct* (%ObjectStruct*)*]* %72, i32 0, i32 7
-	%74 = load %ObjectStruct* (%ObjectStruct*)*, %ObjectStruct* (%ObjectStruct*)** %73
-	%75 = bitcast %ObjectStruct* (%ObjectStruct*)* %74 to %CellularAutomaton_struct* (%ObjectStruct*)*
-	%76 = call %CellularAutomaton_struct* %75(%ObjectStruct* %68)
-	%77 = load %Main_struct*, %Main_struct** %3
-	%78 = bitcast %Main_struct* %77 to %Main_struct*
-	%79 = getelementptr %Main_struct, %Main_struct* %78, i32 0, i32 1
-	%80 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %79
-	%81 = bitcast %CellularAutomaton_struct* %80 to %ObjectStruct*
-	%82 = bitcast %ObjectStruct* %81 to %CellularAutomaton_struct*
-	%83 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %82, i32 0, i32 0
-	%84 = load i8*, i8** %83
-	%85 = bitcast i8* %84 to [8 x %ObjectStruct* (%ObjectStruct*)*]*
-	%86 = getelementptr [8 x %ObjectStruct* (%ObjectStruct*)*], [8 x %ObjectStruct* (%ObjectStruct*)*]* %85, i32 0, i32 1
-	%87 = load %ObjectStruct* (%ObjectStruct*)*, %ObjectStruct* (%ObjectStruct*)** %86
-	%88 = bitcast %ObjectStruct* (%ObjectStruct*)* %87 to %CellularAutomaton_struct* (%ObjectStruct*)*
-	%89 = call %CellularAutomaton_struct* %88(%ObjectStruct* %81)
-	%90 = load %IntStruct*, %IntStruct** %45
-	%91 = call i8* @malloc(i64 16)
-	%92 = bitcast i8* %91 to %IntStruct*
-	%93 = getelementptr %IntStruct, %IntStruct* %92, i32 0, i32 1
-	store i32 1, i32* %93
-	%94 = getelementptr %IntStruct, %IntStruct* %90, i32 0, i32 1
-	%95 = load i32, i32* %94
-	%96 = getelementptr %IntStruct, %IntStruct* %92, i32 0, i32 1
-	%97 = load i32, i32* %96
-	%98 = sub i32 %95, %97
-	%99 = call i8* @malloc(i64 16)
-	%100 = bitcast i8* %99 to %IntStruct*
-	%101 = getelementptr %IntStruct, %IntStruct* %100, i32 0, i32 1
-	store i32 %98, i32* %101
-	store %IntStruct* %100, %IntStruct** %45
+	%60 = load %Main_struct*, %Main_struct** %3
+	%61 = bitcast %Main_struct* %60 to %Main_struct*
+	%62 = getelementptr %Main_struct, %Main_struct* %61, i32 0, i32 1
+	%63 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %62
+	%64 = bitcast %CellularAutomaton_struct* %63 to %ObjectStruct*
+	%65 = bitcast %ObjectStruct* %64 to %CellularAutomaton_struct*
+	%66 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %65, i32 0, i32 0
+	%67 = load i8*, i8** %66
+	%68 = bitcast i8* %67 to [8 x %ObjectStruct* (%ObjectStruct*)*]*
+	%69 = getelementptr [8 x %ObjectStruct* (%ObjectStruct*)*], [8 x %ObjectStruct* (%ObjectStruct*)*]* %68, i32 0, i32 7
+	%70 = load %ObjectStruct* (%ObjectStruct*)*, %ObjectStruct* (%ObjectStruct*)** %69
+	%71 = bitcast %ObjectStruct* (%ObjectStruct*)* %70 to %CellularAutomaton_struct* (%ObjectStruct*)*
+	%72 = call %CellularAutomaton_struct* %71(%ObjectStruct* %64)
+	%73 = load %Main_struct*, %Main_struct** %3
+	%74 = bitcast %Main_struct* %73 to %Main_struct*
+	%75 = getelementptr %Main_struct, %Main_struct* %74, i32 0, i32 1
+	%76 = load %CellularAutomaton_struct*, %CellularAutomaton_struct** %75
+	%77 = bitcast %CellularAutomaton_struct* %76 to %ObjectStruct*
+	%78 = bitcast %ObjectStruct* %77 to %CellularAutomaton_struct*
+	%79 = getelementptr %CellularAutomaton_struct, %CellularAutomaton_struct* %78, i32 0, i32 0
+	%80 = load i8*, i8** %79
+	%81 = bitcast i8* %80 to [8 x %ObjectStruct* (%ObjectStruct*)*]*
+	%82 = getelementptr [8 x %ObjectStruct* (%ObjectStruct*)*], [8 x %ObjectStruct* (%ObjectStruct*)*]* %81, i32 0, i32 1
+	%83 = load %ObjectStruct* (%ObjectStruct*)*, %ObjectStruct* (%ObjectStruct*)** %82
+	%84 = bitcast %ObjectStruct* (%ObjectStruct*)* %83 to %CellularAutomaton_struct* (%ObjectStruct*)*
+	%85 = call %CellularAutomaton_struct* %84(%ObjectStruct* %77)
+	%86 = load %IntStruct*, %IntStruct** %41
+	%87 = call i8* @malloc(i64 16)
+	%88 = bitcast i8* %87 to %IntStruct*
+	%89 = getelementptr %IntStruct, %IntStruct* %88, i32 0, i32 1
+	store i32 1, i32* %89
+	%90 = getelementptr %IntStruct, %IntStruct* %86, i32 0, i32 1
+	%91 = load i32, i32* %90
+	%92 = getelementptr %IntStruct, %IntStruct* %88, i32 0, i32 1
+	%93 = load i32, i32* %92
+	%94 = sub i32 %91, %93
+	%95 = call i8* @malloc(i64 16)
+	%96 = bitcast i8* %95 to %IntStruct*
+	%97 = getelementptr %IntStruct, %IntStruct* %96, i32 0, i32 1
+	store i32 %94, i32* %97
+	store %IntStruct* %96, %IntStruct** %41
 	br label %while_cond
 
 while_end:
-	%102 = load %Main_struct*, %Main_struct** %3
-	ret %Main_struct* %102
+	%98 = load %Main_struct*, %Main_struct** %3
+	ret %Main_struct* %98
 }

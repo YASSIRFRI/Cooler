@@ -16,6 +16,7 @@
     
         print() : SELF_TYPE {
             {
+                out_string("Test 4\n");
                 out_string(population_map.concat("\n"));
                 self;
             }
@@ -60,7 +61,7 @@
         };
     
         evolve() : SELF_TYPE {
-            (let position : Int <- 0 in    (* Initialize position to 0 *)
+            (let position : Int <- 0 in   
             (let num : Int <- num_cells() in
             (let temp : String in
                 {
@@ -85,9 +86,8 @@
         main() : SELF_TYPE {
             {
                 out_string("Test1\n");
-                cells <- new CellularAutomaton;
-                out_string("Test4\n");
-                cells.init("         X         ");
+                cells <- (new CellularAutomaton).init("XXXXXXXXXXXXXXXXXXX");
+                out_string("T");
                 cells.print();
                 (let countdown : Int <- 20 in
                     while 0 < countdown loop
