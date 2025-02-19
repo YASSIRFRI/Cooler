@@ -963,6 +963,30 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             cmp := cg.currentBlock.NewICmp(enum.IPredSLE, cg.unboxInt(left), cg.unboxInt(right))
             return cg.boxBool(cmp)
         case "=":
+            if left.Type().Equal(cg.getClassPtrType("String")) &&
+            right.Type().Equal(cg.getClassPtrType("String")) {
+             lPtrPtr := cg.currentBlock.NewGetElementPtr(
+                 cg.stringStruct, left,
+                 constant.NewInt(types.I32, 0),
+                 constant.NewInt(types.I32, 0),
+             )
+             lPtr := cg.currentBlock.NewLoad(types.NewPointer(types.I8), lPtrPtr)
+             
+             rPtrPtr := cg.currentBlock.NewGetElementPtr(
+                 cg.stringStruct, right,
+                 constant.NewInt(types.I32, 0),
+                 constant.NewInt(types.I32, 0),
+             )
+             rPtr := cg.currentBlock.NewLoad(types.NewPointer(types.I8), rPtrPtr)
+             
+             strcmpFn := cg.declareStrcmp()
+             cmpResult := cg.currentBlock.NewCall(strcmpFn, lPtr, rPtr)
+             
+             zero := constant.NewInt(types.I32, 0)
+             eq := cg.currentBlock.NewICmp(enum.IPredEQ, cmpResult, zero)
+             
+             return cg.boxBool(eq)
+         }
             if left.Type().Equal(cg.getClassPtrType("Int")) &&
                 right.Type().Equal(cg.getClassPtrType("Int")) {
                 eq := cg.currentBlock.NewICmp(enum.IPredEQ, cg.unboxInt(left), cg.unboxInt(right))
@@ -1394,4 +1418,16 @@ func (cg *CodeGenerator) newUniqueName(prefix string) string {
     name := fmt.Sprintf("%s_%d", prefix, cg.counter)
     cg.counter++
     return name
+}
+
+
+func (cg *CodeGenerator) declareStrcmp() *ir.Func {
+    fn := findFuncByName(cg.module, "strcmp")
+    if fn != nil {
+        return fn
+    }
+    param1 := ir.NewParam("str1", types.NewPointer(types.I8))
+    param2 := ir.NewParam("str2", types.NewPointer(types.I8))
+    fn = cg.module.NewFunc("strcmp", types.I32, param1, param2)
+    return fn
 }

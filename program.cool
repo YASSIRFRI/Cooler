@@ -1,104 +1,111 @@
-    (* models one-dimensional cellular automaton on a circle of finite radius
-    arrays are faked as Strings,
-    X's respresent live cells, dots represent dead cells,
-    no error checking is done *)
-    class CellularAutomaton inherits IO {
-        population_map : String;
-    
-        init(map : String) : SELF_TYPE {
-            {
-                out_string("Test 2\n");
-                population_map <- map;
-                out_string("Test 3\n");
-                self;
-            }
-        };
-    
-        print() : SELF_TYPE {
-            {
-                out_string("Test 4\n");
-                out_string(population_map.concat("\n"));
-                self;
-            }
-        };
-    
-        num_cells() : Int {
-            population_map.length()
-        };
-    
-        cell(position : Int) : String {
-            population_map.substr(position, 1)
-        };
-    
-        cell_left_neighbor(position : Int) : String {
-            if position = 0 then
-                cell(num_cells() - 1)
-            else
-                cell(position - 1)
-            fi
-        };
-    
-        cell_right_neighbor(position : Int) : String {
-            if position = num_cells() - 1 then
-                cell(0)
-            else
-                cell(position + 1)
-            fi
-        };
-    
-        (* a cell will live if exactly 1 of itself and it's immediate
-        neighbors are alive *)
-        cell_at_next_evolution(position : Int) : String {
-            if (if cell(position) = "X" then 1 else 0 fi
-                + if cell_left_neighbor(position) = "X" then 1 else 0 fi
-                + if cell_right_neighbor(position) = "X" then 1 else 0 fi
-                = 1)
-            then
-                "X"
-            else
-                "."
-            fi
-        };
-    
-        evolve() : SELF_TYPE {
-            (let position : Int <- 0 in   
-            (let num : Int <- num_cells() in
-            (let temp : String in
-                {
-                    while position < num loop
-                        {
-                            temp <- temp.concat(cell_at_next_evolution(position));
-                            position <- position + 1;
-                        }
-                    pool;
-                    population_map <- temp;
-                    self;
-                }
-            )
-            )
-            )
-        };
+class Node {
+    value : String;
+    next  : Node;
+
+    get_value() : String {
+        value
     };
 
-    class Main inherits IO{
-        cells : CellularAutomaton;
-    
-        main() : SELF_TYPE {
-            {
-                out_string("Test1\n");
-                cells <- (new CellularAutomaton).init("XXXXXXXXXXXXXXXXXXX");
-                out_string("T");
-                cells.print();
-                (let countdown : Int <- 20 in
-                    while 0 < countdown loop
-                        {
-                            cells.evolve();
-                            cells.print();
-                            countdown <- countdown - 1;
-                        }
-                    pool
-                );
-                self;
-            }
-        };
+    set_value(v : String) : Node {
+        {
+            value <- v;
+            self;
+        }
     };
+
+    get_next() : Node {
+        next
+    };
+
+    set_next(n : Node) : Node {
+        {
+            next <- n;
+            self;
+        }
+    };
+
+    init_node() : Node {
+        {
+            value <- "";
+            next <- self;
+            self;
+        }
+    };
+};
+
+class LinkedList inherits IO {
+    head : Node;
+
+    -- Initialize the list with a sentinel node.
+    init_list() : LinkedList {
+        {
+            head <- new Node;
+            head.init_node();
+            self;
+        }
+    };
+
+    insert(val : String) : LinkedList {
+        let new_node : Node <- new Node in {
+            new_node.set_value(val);
+            new_node.set_next(head.get_next());
+            head.set_next(new_node);
+            self;
+        }
+    };
+
+    print() : LinkedList {
+        let temp : Node <- head.get_next() in {
+            while not (temp = head) loop {
+                out_string(temp.get_value());
+                out_string(" ");
+                temp <- temp.get_next();
+            } pool;
+            out_string("\n");
+            self;
+        }
+    };
+
+    -- Search for a value in the list. Returns true if found, false otherwise.
+    search(val : String) : Bool {
+        let temp : Node <- head.get_next() in {
+            let found : Bool <- false in {
+                while not (temp = head) loop {
+                    if temp.get_value() = val then {
+                        found <- true;
+                        -- Break the loop by setting temp to head.
+                        temp <- head;
+                    } else {
+                        temp <- temp.get_next();
+                    } fi;
+                } pool;
+                found
+            }
+        }
+    };
+};
+
+class Main inherits IO {
+    main() : Object {
+        let list : LinkedList <- new LinkedList in {
+            list.init_list();
+            -- Insert sample strings.
+            list.insert("Hello");
+            list.insert("World");
+            list.insert("LinkedList");
+            list.insert("Test");
+            list.print();
+            out_string("Enter a string to search: ");
+            let search_val : String <- in_string() in {
+                -- out_string(search_val);
+                if list.search(search_val) then
+                    out_string("Value found.\n")
+                else
+                    out_string("Value not found.\n")
+                fi
+            };
+            list.print();
+            self;
+        }
+    };
+};
