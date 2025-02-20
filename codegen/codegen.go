@@ -13,69 +13,55 @@ import (
     "github.com/llir/llvm/ir/value"
 )
 
-// --------------------------------------------------------------------------
-// Helper type for parameter attributes.
 type paramAttr string
 
 func (a paramAttr) String() string    { return string(a) }
 func (a paramAttr) IsParamAttribute() {}
 
-// e.g. used for "nocapture".
 const Nocapture paramAttr = "nocapture"
 
-// --------------------------------------------------------------------------
-// DispatchEntry is used to compute dispatch table layouts.
 type DispatchEntry struct {
     Class  string
     Method string
 }
 
-// --------------------------------------------------------------------------
-// CodeGenerator accumulates all structures, methods, vtables, etc.
 type CodeGenerator struct {
     module          *ir.Module
     currentFunc     *ir.Func
     currentBlock    *ir.Block
-    variableEnv     map[string]*ir.InstAlloca // var name -> alloca
-    variableTypeEnv map[string]string         // var name -> COOL type
+    variableEnv     map[string]*ir.InstAlloca
+    variableTypeEnv map[string]string       
 
     printfFunc *ir.Func
     scanfFunc  *ir.Func
 
-    // Format strings for output and input.
     fmtString   *ir.Global
     fmtInt      *ir.Global
     fmtStringIn *ir.Global
     fmtIntIn    *ir.Global
 
-    stringCounter int // to produce unique global string names
+    stringCounter int
 
-    // Current COOL class name we are inside of (for attributes, self, etc.).
     currentClass string
-
-    // attributeIndices["Class.attr"] = index in the LLVM struct
     attributeIndices map[string]int
-
-    // classTypes["ClassName"] = the LLVM struct type for that class
     classTypes map[string]types.Type
 
     // attributeTypeEnv["Class.attr"] = COOL type of that attribute
     attributeTypeEnv map[string]string
 
-    // For uniqueness in block names etc.
+    // For uniqueness in block names
     counter int
 
-    // Canonical pointer types for each COOL class, e.g. %X_struct*
+    // pointer types for each COOL class, e.g. %X_struct*
     classPtrTypes map[string]types.Type
 
-    // The internal LLVM struct for built-in classes:
     stringStruct *types.StructType
     intStruct    *types.StructType
     boolStruct   *types.StructType
     objectStruct *types.StructType
     ioStruct     *types.StructType
 
-    // Because we treat "String" as a pointer to `stringStruct`
+    // Because I treat "String" as a pointer to `stringStruct`
     stringType types.Type
 
     // For dynamic dispatch: vtables
@@ -84,12 +70,10 @@ type CodeGenerator struct {
     methodIndices        map[string]int
 }
 
-// uniqueGlobalName produces a unique global name.
 func (cg *CodeGenerator) uniqueGlobalName(prefix string) string {
     return fmt.Sprintf("%s_%d", prefix, len(cg.module.Globals))
 }
 
-// isBuiltIn checks if className is one of the five COOL built-ins.
 func isBuiltIn(className string) bool {
     return className == "Object" ||
         className == "Int" ||
@@ -98,9 +82,7 @@ func isBuiltIn(className string) bool {
         className == "IO"
 }
 
-// --------------------------------------------------------------------------
 // Boxing/unboxing Int and Bool
-// --------------------------------------------------------------------------
 func (cg *CodeGenerator) boxInt(val value.Value) value.Value {
     size := constant.NewInt(types.I64, cg.typeSize(cg.intStruct))
     mallocFn := findFuncByName(cg.module, "malloc")
@@ -147,7 +129,6 @@ func (cg *CodeGenerator) unboxBool(obj value.Value) value.Value {
     return cg.currentBlock.NewLoad(types.I1, fieldPtr)
 }
 
-// --------------------------------------------------------------------------
 // typeSize returns a crude size (in bytes) for a given LLVM type.
 func (cg *CodeGenerator) typeSize(t types.Type) int64 {
     switch tt := t.(type) {
@@ -203,7 +184,6 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.intStruct.SetName("IntStruct")
     cg.module.NewTypeDef("IntStruct", cg.intStruct)
 
-    // Builtin Bool: vtable pointer + i1
     cg.boolStruct = types.NewStruct(
         types.NewPointer(types.I8), // vtable
         types.I1,                   // value
@@ -211,7 +191,6 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.boolStruct.SetName("BoolStruct")
     cg.module.NewTypeDef("BoolStruct", cg.boolStruct)
 
-    // Builtin String: vtable pointer + i8* data
     cg.stringStruct = types.NewStruct(
         types.NewPointer(types.I8), // vtable
         types.NewPointer(types.I8), // data pointer
@@ -219,7 +198,6 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.stringStruct.SetName("StringStruct")
     cg.module.NewTypeDef("StringStruct", cg.stringStruct)
 
-    // Builtin IO: vtable pointer only
     cg.ioStruct = types.NewStruct(types.NewPointer(types.I8))
     cg.ioStruct.SetName("IOStruct")
     cg.module.NewTypeDef("IOStruct", cg.ioStruct)
@@ -232,8 +210,7 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
 
     cg.stringType = types.NewPointer(cg.stringStruct)
 
-
-
+    //these will always exist in the executables
     cg.declareExternalIO()
     cg.declareMalloc()
     cg.defineStringLength()
@@ -404,7 +381,7 @@ func (cg *CodeGenerator) defineStringLength() {
     )
     charPtr := entry.NewLoad(types.NewPointer(types.I8), charPtrPtr)
 
-    // We'll count bytes until we see a '\0'
+    // I'll count bytes until I see a '\0'
     counterAlloca := entry.NewAlloca(types.I32)
     entry.NewStore(constant.NewInt(types.I32, 0), counterAlloca)
 
@@ -1251,7 +1228,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         // vtPtr is now i8**. Load i8* from it:
         vtField := cg.currentBlock.NewLoad(types.NewPointer(types.I8), vtPtr)
 
-        // bitcast i8* => [N x fn ptr]* so we can do a GEP on the array
+        // bitcast i8* => [N x fn ptr]* so I can do a GEP on the array
         layout := cg.dispatchTableLayouts[staticType]
         commonSelfType := cg.getClassPtrType("Object")
         commonMethodFnType := types.NewFunc(commonSelfType, commonSelfType)
@@ -1448,11 +1425,9 @@ func (cg *CodeGenerator) declareExit() {
 
 
 func (cg *CodeGenerator) defineObjectBuiltins() {
-    // --- 1) Object_abort() ---
-    // Signature: %ObjectStruct* @Object_abort(%ObjectStruct* %self)
     abortFn := cg.module.NewFunc(
         "Object_abort",
-        cg.getClassPtrType("Object"), // returns an Object*
+        cg.getClassPtrType("Object"),
         ir.NewParam("self", cg.getClassPtrType("Object")),
     )
     abortBlock := abortFn.NewBlock("entry")
@@ -1460,15 +1435,12 @@ func (cg *CodeGenerator) defineObjectBuiltins() {
     abortBlock.NewCall(exitFn, constant.NewInt(types.I32, 1))
     abortBlock.NewUnreachable()
 
-    // --- 2) Object_type_name() ---
-    // Signature: %StringStruct* @Object_type_name(%ObjectStruct* %self)
     typeNameFn := cg.module.NewFunc(
         "Object_type_name",
-        cg.stringType, // returns a String*
+        cg.stringType,
         ir.NewParam("self", cg.getClassPtrType("Object")),
     )
     tnBlock := typeNameFn.NewBlock("entry")
-    // Create and return a static string "Object"
     strPtr := cg.genStringConstantPtr("Object")
     tnBlock.NewRet(strPtr)
 
