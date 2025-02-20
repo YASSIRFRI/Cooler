@@ -923,10 +923,14 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         return phi
 
     case *parser.While:
-        condBlock := cg.currentFunc.NewBlock("while_cond")
-        bodyBlock := cg.currentFunc.NewBlock("while_body")
-        endBlock := cg.currentFunc.NewBlock("while_end")
-
+        condBlockName := cg.newUniqueName("while_cond")
+        bodyBlockName := cg.newUniqueName("while_body")
+        endBlockName  := cg.newUniqueName("while_end")
+    
+        condBlock := cg.currentFunc.NewBlock(condBlockName)
+        bodyBlock := cg.currentFunc.NewBlock(bodyBlockName)
+        endBlock  := cg.currentFunc.NewBlock(endBlockName)
+    
         cg.currentBlock.NewBr(condBlock)
         cg.currentBlock = condBlock
         condVal := cg.genExpr(n.Condition)
@@ -1156,10 +1160,7 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 
     case *parser.MethodCall:
         receiver := cg.genExpr(n.Object)
-        fmt.Printf("Receiver for method call %s of type %s\n",n.Object,n.TargetType)
         receiver = cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType("Object"))
-
-        // Figure out the static type we think the receiver has
         staticType := cg.currentClass
         if id, ok := n.Object.(*parser.Ident); ok {
             if t, found := cg.variableTypeEnv[id.Name]; found {

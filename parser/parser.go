@@ -2,7 +2,6 @@ package parser
 
 import (
     "cooler/lexer"
-    "errors"
     "fmt"
     "strconv"
 )
@@ -177,22 +176,36 @@ type infixParseFn func(Node) (Node, error)
 type Parser struct {
     tokens []*lexer.Token
     pos    int
-    errors []string
 
     prefixParseFns map[string]prefixParseFn
     infixParseFns  map[string]infixParseFn
+}
+
+// errorf is a helper that attaches the current line/token context
+// to the error message.
+func (p *Parser) errorf(format string, args ...interface{}) error {
+    tok := p.currentToken()
+    line := -1
+    tokenType := "EOF" // fallback if we have no current token
+    var tokenVal interface{}
+
+    if tok != nil {
+        line = tok.Line
+        tokenType = tok.Type
+        tokenVal = tok.Value
+    }
+
+    prefix := fmt.Sprintf("[Line %d, token: %s, value: %v] ", line, tokenType, tokenVal)
+    return fmt.Errorf(prefix+format, args...)
 }
 
 func NewParser(tokens []*lexer.Token) *Parser {
     p := &Parser{
         tokens:         tokens,
         pos:            0,
-        errors:         []string{},
         prefixParseFns: make(map[string]prefixParseFn),
         infixParseFns:  make(map[string]infixParseFn),
     }
-
-
 
     // Prefix parsers:
     p.registerPrefix("ID", p.parseIdent)
@@ -211,8 +224,6 @@ func NewParser(tokens []*lexer.Token) *Parser {
     p.registerPrefix("TILDE", p.parseUnaryOperation)
     p.registerPrefix("INT_COMP", p.parseUnaryOperation)
     p.registerPrefix("CASE", p.parseCaseExpression)
-
-
 
     // Infix operators:
     p.registerInfix("PLUS", p.parseInfixExpression)
@@ -280,12 +291,12 @@ func (p *Parser) registerInfix(tokenType string, fn infixParseFn) {
 func (p *Parser) parseExpression(precedence int) (Node, error) {
     tok := p.currentToken()
     if tok == nil {
-        return nil, errors.New("unexpected end of input")
+        return nil, p.errorf("unexpected end of input")
     }
 
     prefix := p.prefixParseFns[tok.Type]
     if prefix == nil {
-        return nil, fmt.Errorf("no prefix parse function for token %s", tok.Type)
+        return nil, p.errorf("no prefix parse function for token %s", tok.Type)
     }
 
     // Parse left side via prefix function:
@@ -318,16 +329,18 @@ func (p *Parser) parseExpression(precedence int) (Node, error) {
 func (p *Parser) parseIdent() (Node, error) {
     tok := p.currentToken()
     if tok == nil {
-        return nil, errors.New("expected identifier, got nil")
+        return nil, p.errorf("expected identifier, got nil token")
     }
 
-    name := tok.Value.(string)
-    p.nextToken() //  the ID
+    name, ok := tok.Value.(string)
+    if !ok {
+        return nil, p.errorf("identifier token value is not a string")
+    }
+    p.nextToken() // consume the ID
 
     // Check if next token is ASSIGN (i.e. "<-")
     if p.currentToken() != nil && p.currentToken().Type == "ASSIGN" {
-        // parse assignment
-        p.nextToken() //  ASSIGN
+        p.nextToken() // consume ASSIGN
         right, err := p.parseExpression(_LOWEST)
         if err != nil {
             return nil, err
@@ -344,10 +357,13 @@ func (p *Parser) parseIdent() (Node, error) {
 
 func (p *Parser) parseIntConst() (Node, error) {
     tok := p.currentToken()
+    if tok == nil {
+        return nil, p.errorf("expected integer, got nil token")
+    }
     strVal := fmt.Sprintf("%v", tok.Value)
     val, err := strconv.Atoi(strVal)
     if err != nil {
-        return nil, fmt.Errorf("could not parse integer %s", strVal)
+        return nil, p.errorf("could not parse integer %s", strVal)
     }
     p.nextToken()
     return &IntConst{Value: val}, nil
@@ -355,9 +371,12 @@ func (p *Parser) parseIntConst() (Node, error) {
 
 func (p *Parser) parseBoolConst() (Node, error) {
     tok := p.currentToken()
+    if tok == nil {
+        return nil, p.errorf("expected bool, got nil token")
+    }
     boolVal, ok := tok.Value.(bool)
     if !ok {
-        return nil, fmt.Errorf("could not parse bool %v", tok.Value)
+        return nil, p.errorf("could not parse bool %v", tok.Value)
     }
     p.nextToken()
     return &BoolConst{Value: boolVal}, nil
@@ -365,38 +384,49 @@ func (p *Parser) parseBoolConst() (Node, error) {
 
 func (p *Parser) parseStringConst() (Node, error) {
     tok := p.currentToken()
+    if tok == nil {
+        return nil, p.errorf("expected string, got nil token")
+    }
     strVal, ok := tok.Value.(string)
     if !ok {
-        return nil, fmt.Errorf("could not parse string %v", tok.Value)
+        return nil, p.errorf("could not parse string %v", tok.Value)
     }
     p.nextToken()
     return &StringConst{Value: strVal}, nil
 }
 
 func (p *Parser) parseSelf() (Node, error) {
-    p.nextToken() //  SELF
+    if p.currentToken() == nil {
+        return nil, p.errorf("expected SELF, got nil token")
+    }
+    p.nextToken() // consume SELF
     return &Self{}, nil
 }
 
 // Distinguish (expr) from bare function call:
 func (p *Parser) parseGroupedExpression() (Node, error) {
-    // We have '(' as current
-    p.nextToken() //  '('
+    if p.currentToken() == nil {
+        return nil, p.errorf("expected '(' but got nil token")
+    }
+    p.nextToken() // consume '('
 
     exp, err := p.parseExpression(_LOWEST)
     if err != nil {
         return nil, err
     }
     if p.currentToken() == nil || p.currentToken().Type != "RPAREN" {
-        return nil, fmt.Errorf("expected RPAREN, got %v", p.currentToken())
+        return nil, p.errorf("expected RPAREN, got %v", p.currentToken())
     }
-    p.nextToken() //  ')'
+    p.nextToken() // consume ')'
     return exp, nil
 }
 
 func (p *Parser) parseBlockExpression() (Node, error) {
     // A block is: { expr1 ; expr2 ; ... exprN }
-    p.nextToken() //  LBRACE
+    if p.currentToken() == nil {
+        return nil, p.errorf("expected '{', got nil token")
+    }
+    p.nextToken() // consume LBRACE
 
     var exprs []Node
     for p.currentToken() != nil && p.currentToken().Type != "RBRACE" {
@@ -407,75 +437,83 @@ func (p *Parser) parseBlockExpression() (Node, error) {
         exprs = append(exprs, e)
 
         if p.currentToken() == nil {
-            return nil, errors.New("unexpected end of input in block")
+            return nil, p.errorf("unexpected end of input in block")
         }
         if p.currentToken().Type == "SEMICOLON" {
-            p.nextToken() //  semicolon
+            p.nextToken() // consume semicolon
         } else if p.currentToken().Type != "RBRACE" {
-            return nil, fmt.Errorf("expected '}' or ';', got %v", p.currentToken())
+            return nil, p.errorf("expected '}' or ';', got %v", p.currentToken())
         }
     }
 
     if p.currentToken() == nil || p.currentToken().Type != "RBRACE" {
-        return nil, fmt.Errorf("expected '}' at end of block, got %v", p.currentToken())
+        return nil, p.errorf("expected '}' at end of block, got %v", p.currentToken())
     }
-    p.nextToken() //  RBRACE
+    p.nextToken() // consume RBRACE
     return &Block{Exprs: exprs}, nil
 }
 
 func (p *Parser) parseIfExpression() (Node, error) {
-    p.nextToken() //  IF
+    if p.currentToken() == nil {
+        return nil, p.errorf("expected IF, got nil token")
+    }
+    p.nextToken() // consume IF
     cond, err := p.parseExpression(_LOWEST)
     if err != nil {
         return nil, err
     }
     if p.currentToken() == nil || p.currentToken().Type != "THEN" {
-        return nil, fmt.Errorf("expected THEN, got %v", p.currentToken())
+        return nil, p.errorf("expected THEN, got %v", p.currentToken())
     }
-    p.nextToken() //  THEN
+    p.nextToken() // consume THEN
     trueBranch, err := p.parseExpression(_LOWEST)
     if err != nil {
         return nil, err
     }
     if p.currentToken() == nil || p.currentToken().Type != "ELSE" {
-        return nil, fmt.Errorf("expected ELSE, got %v", p.currentToken())
+        return nil, p.errorf("expected ELSE, got %v", p.currentToken())
     }
-    p.nextToken() //  ELSE
+    p.nextToken() // consume ELSE
     falseBranch, err := p.parseExpression(_LOWEST)
     if err != nil {
         return nil, err
     }
     if p.currentToken() == nil || p.currentToken().Type != "FI" {
-        return nil, fmt.Errorf("expected FI, got %v", p.currentToken())
+        return nil, p.errorf("expected FI, got %v", p.currentToken())
     }
-    p.nextToken() //  FI
+    p.nextToken() // consume FI
     return &If{Condition: cond, True: trueBranch, False: falseBranch}, nil
 }
 
 func (p *Parser) parseWhileExpression() (Node, error) {
-    //  WHILE
-    p.nextToken()
+    if p.currentToken() == nil {
+        return nil, p.errorf("expected WHILE, got nil token")
+    }
+    p.nextToken() // consume WHILE
     cond, err := p.parseExpression(_LOWEST)
     if err != nil {
         return nil, err
     }
     if p.currentToken() == nil || p.currentToken().Type != "LOOP" {
-        return nil, fmt.Errorf("expected LOOP, got %v", p.currentToken())
+        return nil, p.errorf("expected LOOP, got %v", p.currentToken())
     }
-    p.nextToken()
+    p.nextToken() // consume LOOP
     body, err := p.parseExpression(_LOWEST)
     if err != nil {
         return nil, err
     }
     if p.currentToken() == nil || p.currentToken().Type != "POOL" {
-        return nil, fmt.Errorf("expected POOL, got %v", p.currentToken())
+        return nil, p.errorf("expected POOL, got %v", p.currentToken())
     }
-    p.nextToken()
+    p.nextToken() // consume POOL
     return &While{Condition: cond, Body: body}, nil
 }
 
 func (p *Parser) parseLetExpression() (Node, error) {
-    //  LET
+    // consume LET
+    if p.currentToken() == nil {
+        return nil, p.errorf("expected LET, got nil token")
+    }
     p.nextToken()
 
     var attrs []*Attribute
@@ -487,21 +525,21 @@ func (p *Parser) parseLetExpression() (Node, error) {
         }
         attr, ok := attrNode.(*Attribute)
         if !ok {
-            return nil, fmt.Errorf("expected attribute in let, got %T", attrNode)
+            return nil, p.errorf("expected attribute in let, got %T", attrNode)
         }
         attrs = append(attrs, attr)
 
         if p.currentToken() != nil && p.currentToken().Type == "COMMA" {
-            p.nextToken() //  comma
+            p.nextToken() // consume comma
         } else {
             break
         }
     }
 
     if p.currentToken() == nil || p.currentToken().Type != "IN" {
-        return nil, fmt.Errorf("expected IN, got %v", p.currentToken())
+        return nil, p.errorf("expected IN, got %v", p.currentToken())
     }
-    p.nextToken() //  IN
+    p.nextToken() // consume IN
 
     body, err := p.parseExpression(_LOWEST)
     if err != nil {
@@ -511,21 +549,26 @@ func (p *Parser) parseLetExpression() (Node, error) {
 }
 
 func (p *Parser) parseNewExpression() (Node, error) {
-    //  NEW
+    // consume NEW
+    if p.currentToken() == nil {
+        return nil, p.errorf("expected NEW, got nil token")
+    }
     p.nextToken()
     tok := p.currentToken()
     if tok == nil || tok.Type != "TYPE" {
-        return nil, fmt.Errorf("expected TYPE after NEW, got %v", tok)
+        return nil, p.errorf("expected TYPE after NEW, got %v", tok)
     }
     typeName := tok.Value.(string)
-    fmt.Println("Parser*** The type name is: ",typeName)
     p.nextToken()
     return &New{Type: typeName}, nil
 }
 
 func (p *Parser) parseUnaryOperation() (Node, error) {
     opTok := p.currentToken()
-    p.nextToken() //  operator
+    if opTok == nil {
+        return nil, p.errorf("expected unary operator, got nil token")
+    }
+    p.nextToken() // consume operator
     right, err := p.parseExpression(_PREFIX)
     if err != nil {
         return nil, err
@@ -534,18 +577,20 @@ func (p *Parser) parseUnaryOperation() (Node, error) {
 }
 
 func (p *Parser) parseCaseExpression() (Node, error) {
-    //eat out the CASE token
-    p.nextToken() 
+    // consume CASE token
+    if p.currentToken() == nil {
+        return nil, p.errorf("expected CASE, got nil token")
+    }
+    p.nextToken()
 
     expr, err := p.parseExpression(_LOWEST)
     if err != nil {
         return nil, err
     }
-    fmt.Println("The expression in case is: ",expr)
     if p.currentToken() == nil || p.currentToken().Type != "OF" {
-        return nil, fmt.Errorf("expected OF after CASE, got %v", p.currentToken())
+        return nil, p.errorf("expected OF after CASE, got %v", p.currentToken())
     }
-    p.nextToken() 
+    p.nextToken()
 
     var actions []*TypeAction
     for p.currentToken() != nil && p.currentToken().Type != "ESAC" {
@@ -556,15 +601,15 @@ func (p *Parser) parseCaseExpression() (Node, error) {
         actions = append(actions, ta)
 
         if p.currentToken() == nil || p.currentToken().Type != "SEMICOLON" {
-            return nil, fmt.Errorf("expected ';' after case branch, got %v", p.currentToken())
+            return nil, p.errorf("expected ';' after case branch, got %v", p.currentToken())
         }
-        p.nextToken() //  semicolon
+        p.nextToken() // consume semicolon
     }
 
     if p.currentToken() == nil || p.currentToken().Type != "ESAC" {
-        return nil, fmt.Errorf("expected ESAC at end of case, got %v", p.currentToken())
+        return nil, p.errorf("expected ESAC at end of case, got %v", p.currentToken())
     }
-    p.nextToken() //  ESAC
+    p.nextToken() // consume ESAC
 
     return &Case{
         Expr:        expr,
@@ -576,27 +621,27 @@ func (p *Parser) parseTypeAction() (*TypeAction, error) {
     // id : TYPE => expr
     idTok := p.currentToken()
     if idTok == nil || idTok.Type != "ID" {
-        return nil, fmt.Errorf("expected ID in case branch, got %v", idTok)
+        return nil, p.errorf("expected ID in case branch, got %v", idTok)
     }
     ident := idTok.Value.(string)
-    p.nextToken() //  ID
+    p.nextToken() // consume ID
 
     if p.currentToken() == nil || p.currentToken().Type != "COLON" {
-        return nil, fmt.Errorf("expected ':' in case branch, got %v", p.currentToken())
+        return nil, p.errorf("expected ':' in case branch, got %v", p.currentToken())
     }
     p.nextToken()
 
     typeTok := p.currentToken()
     if typeTok == nil || typeTok.Type != "TYPE" {
-        return nil, fmt.Errorf("expected TYPE in case branch, got %v", typeTok)
+        return nil, p.errorf("expected TYPE in case branch, got %v", typeTok)
     }
     ty := typeTok.Value.(string)
     p.nextToken()
 
     if p.currentToken() == nil || p.currentToken().Type != "ACTION" {
-        return nil, fmt.Errorf("expected '=>' in case branch, got %v", p.currentToken())
+        return nil, p.errorf("expected '=>' in case branch, got %v", p.currentToken())
     }
-    p.nextToken() //  '=>'
+    p.nextToken() // consume '=>'
 
     expr, err := p.parseExpression(_LOWEST)
     if err != nil {
@@ -613,26 +658,26 @@ func (p *Parser) parseTypeAction() (*TypeAction, error) {
 func (p *Parser) parseAttrDef() (Node, error) {
     tok := p.currentToken()
     if tok == nil || tok.Type != "ID" {
-        return nil, errors.New("expected attribute identifier")
+        return nil, p.errorf("expected attribute identifier, got %v", tok)
     }
     idName := tok.Value.(string)
     p.nextToken()
 
     if p.currentToken() == nil || p.currentToken().Type != "COLON" {
-        return nil, errors.New("expected ':' after attribute identifier")
+        return nil, p.errorf("expected ':' after attribute identifier, got %v", p.currentToken())
     }
     p.nextToken()
 
     typeTok := p.currentToken()
     if typeTok == nil || typeTok.Type != "TYPE" {
-        return nil, errors.New("expected type after ':'")
+        return nil, p.errorf("expected type after ':', got %v", typeTok)
     }
     typeName := typeTok.Value.(string)
     p.nextToken()
 
     var initExpr Node
     if p.currentToken() != nil && p.currentToken().Type == "ASSIGN" {
-        p.nextToken() //  '<-'
+        p.nextToken() // consume '<-'
         e, err := p.parseExpression(_LOWEST)
         if err != nil {
             return nil, err
@@ -652,10 +697,13 @@ func (p *Parser) parseAttrDef() (Node, error) {
 
 func (p *Parser) parseInfixExpression(left Node) (Node, error) {
     opToken := p.currentToken()
+    if opToken == nil {
+        return nil, p.errorf("expected infix operator, got nil token")
+    }
     precedence := p.curPrecedence()
     opStr := fmt.Sprintf("%v", opToken.Value)
 
-    p.nextToken() //  operator
+    p.nextToken() // consume operator
 
     right, err := p.parseExpression(precedence)
     if err != nil {
@@ -669,19 +717,18 @@ func (p *Parser) parseInfixExpression(left Node) (Node, error) {
 }
 
 // ----------------------------------------------------
-//    *** CHANGED *** parseCallOrMethodCall
+//    parseCallOrMethodCall
 // ----------------------------------------------------
-// We handle three tokens here: DOT, AT, LPAREN
-//   1) obj . method(...)          => MethodCall
-//   2) obj @ Type . method(...)   => MethodCall
-//   3) id(...) with no object     => FunctionCall ( left is an Ident )
 func (p *Parser) parseCallOrMethodCall(left Node) (Node, error) {
     opToken := p.currentToken()
+    if opToken == nil {
+        return nil, p.errorf("expected call symbol (DOT, AT, LPAREN), got nil token")
+    }
 
     switch opToken.Type {
     case "DOT":
         // object.method(...)
-        p.nextToken() //  DOT
+        p.nextToken() // consume DOT
         fnCall, err := p.parseMethodNameAndArgs()
         if err != nil {
             return nil, err
@@ -694,18 +741,19 @@ func (p *Parser) parseCallOrMethodCall(left Node) (Node, error) {
         }, nil
 
     case "AT":
-        p.nextToken() //  '@'
+        // object @ Type . method(...)
+        p.nextToken() // consume '@'
         tyTok := p.currentToken()
         if tyTok == nil || tyTok.Type != "TYPE" {
-            return nil, fmt.Errorf("expected TYPE after '@', got %v", tyTok)
+            return nil, p.errorf("expected TYPE after '@', got %v", tyTok)
         }
         targetType := tyTok.Value.(string)
-        p.nextToken() //  type
+        p.nextToken() // consume type
 
         if p.currentToken() == nil || p.currentToken().Type != "DOT" {
-            return nil, fmt.Errorf("expected DOT after '@ TYPE', got %v", p.currentToken())
+            return nil, p.errorf("expected DOT after '@ TYPE', got %v", p.currentToken())
         }
-        p.nextToken() 
+        p.nextToken() // consume DOT
 
         fnCall, err := p.parseMethodNameAndArgs()
         if err != nil {
@@ -721,53 +769,53 @@ func (p *Parser) parseCallOrMethodCall(left Node) (Node, error) {
         // Bare function call on an identifier:  id(...)
         identLeft, ok := left.(*Ident)
         if !ok {
-            return nil, fmt.Errorf("cannot do '(...)' after non-identifier %T", left)
+            return nil, p.errorf("cannot do '(...)' after non-identifier %T", left)
         }
-        p.nextToken() //  '('
+        p.nextToken() // consume '('
         params, err := p.parseParamsOpt()
         if err != nil {
             return nil, err
         }
         if p.currentToken() == nil || p.currentToken().Type != "RPAREN" {
-            return nil, fmt.Errorf("expected ')', got %v", p.currentToken())
+            return nil, p.errorf("expected ')', got %v", p.currentToken())
         }
-        p.nextToken() //  ')'
+        p.nextToken() // consume ')'
         return &FunctionCall{
             Ident:  identLeft.Name,
             Params: params,
         }, nil
 
     default:
-        return nil, fmt.Errorf("unexpected token %q in parseCallOrMethodCall", opToken.Type)
+        return nil, p.errorf("unexpected token %q in parseCallOrMethodCall", opToken.Type)
     }
 }
 
 // ----------------------------------------------------
-//  *** CHANGED *** parseMethodNameAndArgs
+//  parseMethodNameAndArgs
 //  This is used only after DOT or "obj @Type ."
 // ----------------------------------------------------
 func (p *Parser) parseMethodNameAndArgs() (*FunctionCall, error) {
     // We expect an ID for the method name:
     tok := p.currentToken()
     if tok == nil || tok.Type != "ID" {
-        return nil, fmt.Errorf("expected method name ID, got %v", tok)
+        return nil, p.errorf("expected method name ID, got %v", tok)
     }
     methodName := tok.Value.(string)
-    p.nextToken() //  the method name
+    p.nextToken() // consume the method name
 
     if p.currentToken() == nil || p.currentToken().Type != "LPAREN" {
-        return nil, fmt.Errorf("expected '(', got %v", p.currentToken())
+        return nil, p.errorf("expected '(', got %v", p.currentToken())
     }
-    p.nextToken() //  '('
+    p.nextToken() // consume '('
 
     params, err := p.parseParamsOpt()
     if err != nil {
         return nil, err
     }
     if p.currentToken() == nil || p.currentToken().Type != "RPAREN" {
-        return nil, fmt.Errorf("expected ')', got %v", p.currentToken())
+        return nil, p.errorf("expected ')', got %v", p.currentToken())
     }
-    p.nextToken() //  ')'
+    p.nextToken() // consume ')'
 
     return &FunctionCall{
         Ident:  methodName,
@@ -793,7 +841,7 @@ func (p *Parser) parseParamsOpt() ([]Node, error) {
 
     // Parse additional parameters (if any) separated by COMMA
     for p.currentToken() != nil && p.currentToken().Type == "COMMA" {
-        p.nextToken() //  comma
+        p.nextToken() // consume comma
         exp, err := p.parseExpression(_LOWEST)
         if err != nil {
             return nil, err
@@ -809,12 +857,15 @@ func (p *Parser) parseParamsOpt() ([]Node, error) {
 
 func (p *Parser) parseFeature() (Node, error) {
     idTok := p.currentToken()
-    fmt.Println("The feature name is: ",idTok)
     if idTok == nil || idTok.Type != "ID" {
-        return nil, errors.New("expected feature identifier")
+        return nil, p.errorf("expected feature identifier, got %v", idTok)
     }
     featName := idTok.Value.(string)
-    p.nextToken() //  the feature name
+    p.nextToken() // consume the feature name
+
+    if p.currentToken() == nil {
+        return nil, p.errorf("unexpected end after feature name %s", featName)
+    }
 
     switch p.currentToken().Type {
     case "LPAREN":
@@ -824,13 +875,16 @@ func (p *Parser) parseFeature() (Node, error) {
         // attribute definition
         return p.parseAttributeDef(featName)
     default:
-        return nil, fmt.Errorf("expected '(' or ':' after feature name, got %v", p.currentToken())
+        return nil, p.errorf("expected '(' or ':' after feature name %s, got %v", featName, p.currentToken())
     }
 }
 
 func (p *Parser) parseMethodDef(methodName string) (Node, error) {
     // Current token is LPAREN
-    p.nextToken() //  '('
+    if p.currentToken() == nil || p.currentToken().Type != "LPAREN" {
+        return nil, p.errorf("expected '(' after method name %s, got %v", methodName, p.currentToken())
+    }
+    p.nextToken() // consume '('
 
     formals, err := p.parseFormals()
     if err != nil {
@@ -839,28 +893,28 @@ func (p *Parser) parseMethodDef(methodName string) (Node, error) {
 
     // expect ')'
     if p.currentToken() == nil || p.currentToken().Type != "RPAREN" {
-        return nil, errors.New("expected ')' after method formals")
+        return nil, p.errorf("expected ')' after method formals for %s, got %v", methodName, p.currentToken())
     }
-    p.nextToken() //  ')'
+    p.nextToken() // consume ')'
 
     // expect ':'
     if p.currentToken() == nil || p.currentToken().Type != "COLON" {
-        return nil, errors.New("expected ':' after method formals")
+        return nil, p.errorf("expected ':' after method formals for %s, got %v", methodName, p.currentToken())
     }
-    p.nextToken() //  ':'
+    p.nextToken() // consume ':'
 
     // expect TYPE
     if p.currentToken() == nil || p.currentToken().Type != "TYPE" {
-        return nil, errors.New("expected return TYPE after ':'")
+        return nil, p.errorf("expected return TYPE after ':' in method %s, got %v", methodName, p.currentToken())
     }
     retType := p.currentToken().Value.(string)
-    p.nextToken() //  TYPE
+    p.nextToken() // consume TYPE
 
     // expect '{'
     if p.currentToken() == nil || p.currentToken().Type != "LBRACE" {
-        return nil, errors.New("expected '{' before method body")
+        return nil, p.errorf("expected '{' before method body in method %s, got %v", methodName, p.currentToken())
     }
-    p.nextToken() //  '{'
+    p.nextToken() // consume '{'
 
     // parse body as expression
     body, err := p.parseExpression(_LOWEST)
@@ -870,10 +924,9 @@ func (p *Parser) parseMethodDef(methodName string) (Node, error) {
 
     // expect '}'
     if p.currentToken() == nil || p.currentToken().Type != "RBRACE" {
-        fmt.Println(p.currentToken())
-        return nil, errors.New("expected '}' after method body")
+        return nil, p.errorf("expected '}' after method body of %s, got %v", methodName, p.currentToken())
     }
-    p.nextToken() //  '}'
+    p.nextToken() // consume '}'
 
     return &Method{
         Ident:   methodName,
@@ -884,20 +937,20 @@ func (p *Parser) parseMethodDef(methodName string) (Node, error) {
 }
 
 func (p *Parser) parseAttributeDef(attrName string) (Node, error) {
-    // current token is "COLON",  it
+    // current token is "COLON", consume it
     p.nextToken()
 
     // expect TYPE
     if p.currentToken() == nil || p.currentToken().Type != "TYPE" {
-        return nil, errors.New("expected TYPE after ':' in attribute definition")
+        return nil, p.errorf("expected TYPE after ':' in attribute definition %s, got %v", attrName, p.currentToken())
     }
     attrType := p.currentToken().Value.(string)
-    p.nextToken() //  TYPE
+    p.nextToken() // consume TYPE
 
     var initExpr Node
     // optional '<-' expr
     if p.currentToken() != nil && p.currentToken().Type == "ASSIGN" {
-        p.nextToken() //  '<-'
+        p.nextToken() // consume '<-'
         e, err := p.parseExpression(_LOWEST)
         if err != nil {
             return nil, err
@@ -915,6 +968,7 @@ func (p *Parser) parseFormals() ([]*Formal, error) {
     var formals []*Formal
 
     if p.currentToken() == nil || p.currentToken().Type == "RPAREN" {
+        // no formals
         return formals, nil
     }
 
@@ -925,7 +979,7 @@ func (p *Parser) parseFormals() ([]*Formal, error) {
     formals = append(formals, f)
 
     for p.currentToken() != nil && p.currentToken().Type == "COMMA" {
-        p.nextToken() //  comma
+        p.nextToken() // consume comma
         f, err := p.parseFormal()
         if err != nil {
             return nil, err
@@ -940,23 +994,23 @@ func (p *Parser) parseFormal() (*Formal, error) {
     // expect ID
     idTok := p.currentToken()
     if idTok == nil || idTok.Type != "ID" {
-        return nil, errors.New("expected formal parameter name (ID)")
+        return nil, p.errorf("expected formal parameter name (ID), got %v", idTok)
     }
     name := idTok.Value.(string)
-    p.nextToken() //  ID
+    p.nextToken() // consume ID
 
     // expect ':'
     if p.currentToken() == nil || p.currentToken().Type != "COLON" {
-        return nil, errors.New("expected ':' after formal parameter name")
+        return nil, p.errorf("expected ':' after formal parameter name %s, got %v", name, p.currentToken())
     }
-    p.nextToken() //  ':'
+    p.nextToken() // consume ':'
 
     // expect TYPE
     if p.currentToken() == nil || p.currentToken().Type != "TYPE" {
-        return nil, errors.New("expected TYPE after ':' in formal")
+        return nil, p.errorf("expected TYPE after ':' in formal for %s, got %v", name, p.currentToken())
     }
     ty := p.currentToken().Value.(string)
-    p.nextToken() //  TYPE
+    p.nextToken() // consume TYPE
 
     return &Formal{Ident: name, Type: ty}, nil
 }
@@ -976,37 +1030,37 @@ func (p *Parser) ParseProgram() (*Program, error) {
     }
 
     if len(classes) == 0 {
-        return nil, fmt.Errorf("no classes found")
+        return nil, p.errorf("no classes found")
     }
     return &Program{Classes: classes}, nil
 }
 
 func (p *Parser) parseClass() (*Class, error) {
     if p.currentToken() == nil || p.currentToken().Type != "CLASS" {
-        return nil, errors.New("expected CLASS keyword")
+        return nil, p.errorf("expected CLASS keyword, got %v", p.currentToken())
     }
-    p.nextToken() //  CLASS
+    p.nextToken() // consume CLASS
 
     if p.currentToken() == nil || p.currentToken().Type != "TYPE" {
-        return nil, errors.New("expected class TYPE")
+        return nil, p.errorf("expected class TYPE, got %v", p.currentToken())
     }
     className := p.currentToken().Value.(string)
-    p.nextToken() //  TYPE
+    p.nextToken() // consume TYPE
 
     inherits := ""
     if p.currentToken() != nil && p.currentToken().Type == "INHERITS" {
-        p.nextToken() //  INHERITS
+        p.nextToken() // consume INHERITS
         if p.currentToken() == nil || p.currentToken().Type != "TYPE" {
-            return nil, errors.New("expected TYPE after INHERITS")
+            return nil, p.errorf("expected TYPE after INHERITS, got %v", p.currentToken())
         }
         inherits = p.currentToken().Value.(string)
-        p.nextToken() //  TYPE
+        p.nextToken() // consume TYPE
     }
 
     if p.currentToken() == nil || p.currentToken().Type != "LBRACE" {
-        return nil, errors.New("expected '{' in class")
+        return nil, p.errorf("expected '{' in class %s, got %v", className, p.currentToken())
     }
-    p.nextToken() //  '{'
+    p.nextToken() // consume '{'
 
     features, err := p.parseFeatures()
     if err != nil {
@@ -1014,14 +1068,14 @@ func (p *Parser) parseClass() (*Class, error) {
     }
 
     if p.currentToken() == nil || p.currentToken().Type != "RBRACE" {
-        return nil, errors.New("expected '}' in class")
+        return nil, p.errorf("expected '}' in class %s, got %v", className, p.currentToken())
     }
-    p.nextToken()
+    p.nextToken() // consume '}'
 
     if p.currentToken() == nil || p.currentToken().Type != "SEMICOLON" {
-        return nil, errors.New("expected ';' after class")
+        return nil, p.errorf("expected ';' after class %s, got %v", className, p.currentToken())
     }
-    p.nextToken() 
+    p.nextToken() // consume ';'
 
     return &Class{Name: className, Inherits: inherits, Features: features}, nil
 }
@@ -1034,9 +1088,9 @@ func (p *Parser) parseFeatures() ([]Node, error) {
             return nil, err
         }
         if p.currentToken() == nil || p.currentToken().Type != "SEMICOLON" {
-            return nil, fmt.Errorf("expected ';' after feature definition, got %v", p.currentToken())
+            return nil, p.errorf("expected ';' after feature definition, got %v", p.currentToken())
         }
-        p.nextToken() //  ';'
+        p.nextToken() // consume ';'
         features = append(features, f)
     }
     return features, nil

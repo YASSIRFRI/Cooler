@@ -1,60 +1,34 @@
-(* COOL Program Demonstrating Method Overriding *)
+class Main inherits IO {
+  main(): Object {
+    {
+      let i: Int <- 0 in {
+        while i < 5 loop {
+          out_string("First loop iteration: ");
+          out_int(i);
+          out_string("\n");
+          i <- i + 1;
+        } pool;
+      };
 
-class Animal {
-    speak() : String {
-        "I am an animal.\n"
-    };
-};
+      let j: Int <- 0 in {
+        while j < 5 loop {
+          out_string("Second loop iteration: ");
+          out_int(j);
+          out_string("\n");
+          j <- j + 1;
+        } pool;
+      };
 
-class Dog inherits Animal {
-    speak() : String {
-        "Woof!\n"
-    };
-};
+      let k: Int <- 0 in {
+        while k < 5 loop {
+          out_string("Third loop iteration: ");
+          out_int(k);
+          out_string("\n");
+          k <- k + 1;
+        } pool;
+      };
 
-class Cat inherits Animal {
-    speak() : String {
-        "Meow!\n"
-    };
-};
-
-
-class Bird inherits Dog {
-    speak() : String {
-        "Chirp!\n"
-    };
-};
-
-class Fish inherits Cat {
-    speak() : String {
-        "Blub blub!\n"
-    };
-};
-
-class Parrot inherits Bird {
-    speak() : String {
-        "Polly wants a cracker!\n"
-    };
-};
-
-class Goldfish inherits Fish {
-    speak() : String {
-        "Glub glub!\n"
-    };
-};
-
-
-class Main inherits IO{
-    main() : Object {
-        let animal : Animal <- new Animal,
-            dog : Animal    <- new Dog,
-            cat : Animal    <- new Cat,
-            bird : Bird     <- new Bird
-        in {
-            out_string(animal.speak());
-            out_string(dog.speak());
-            out_string(cat.speak());
-            out_string(bird.speak());
-        }
-    };
+      0;
+    }
+  };
 };
