@@ -232,29 +232,29 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
 
     cg.stringType = types.NewPointer(cg.stringStruct)
 
+
+
     cg.declareExternalIO()
     cg.declareMalloc()
     cg.defineStringLength()
     cg.defineStringConcat()
+    cg.declareExit()
+    cg.defineObjectBuiltins()
     cg.defineStringSubstr()
 
-    // We generate 'main' that eventually calls Main_main or whichever _main is found
     mainFn := cg.module.NewFunc("main", types.I32)
     cg.currentFunc = mainFn
     cg.currentBlock = mainFn.NewBlock("entry")
 
-    // Build a quick class map
     classMap := make(map[string]*parser.Class)
     for _, classNode := range prog.Classes {
         classMap[classNode.Name] = classNode
     }
 
-    // 1) Create class types for user-defined classes
     for _, classNode := range prog.Classes {
         cg.createClassType(classNode, classMap)
     }
 
-    // 2) Declare all methods (no bodies yet)
     for _, classNode := range prog.Classes {
         for _, feat := range classNode.Features {
             if method, ok := feat.(*parser.Method); ok {
@@ -306,7 +306,11 @@ func findFuncByName(mod *ir.Module, name string) *ir.Func {
 }
 
 func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
-    cg.createVTableGlobal("Object", []DispatchEntry{})
+    cg.createVTableGlobal("Object", []DispatchEntry{
+        {Class: "Object", Method: "abort"},
+        {Class: "Object", Method: "type_name"},
+        {Class: "Object", Method: "copy"},
+    })
     cg.createVTableGlobal("Int", []DispatchEntry{})
     cg.createVTableGlobal("String", []DispatchEntry{})
     cg.createVTableGlobal("Bool", []DispatchEntry{})
@@ -1431,3 +1435,70 @@ func (cg *CodeGenerator) declareStrcmp() *ir.Func {
     fn = cg.module.NewFunc("strcmp", types.I32, param1, param2)
     return fn
 }
+
+
+
+func (cg *CodeGenerator) declareExit() {
+    if fn := findFuncByName(cg.module, "exit"); fn == nil {
+        cg.module.NewFunc("exit", types.Void, ir.NewParam("status", types.I32))
+    }
+}
+
+
+
+func (cg *CodeGenerator) defineObjectBuiltins() {
+    // --- 1) Object_abort() ---
+    // Signature: %ObjectStruct* @Object_abort(%ObjectStruct* %self)
+    abortFn := cg.module.NewFunc(
+        "Object_abort",
+        cg.getClassPtrType("Object"), // returns an Object*
+        ir.NewParam("self", cg.getClassPtrType("Object")),
+    )
+    abortBlock := abortFn.NewBlock("entry")
+    exitFn := findFuncByName(cg.module, "exit")
+    abortBlock.NewCall(exitFn, constant.NewInt(types.I32, 1))
+    abortBlock.NewUnreachable()
+
+    // --- 2) Object_type_name() ---
+    // Signature: %StringStruct* @Object_type_name(%ObjectStruct* %self)
+    typeNameFn := cg.module.NewFunc(
+        "Object_type_name",
+        cg.stringType, // returns a String*
+        ir.NewParam("self", cg.getClassPtrType("Object")),
+    )
+    tnBlock := typeNameFn.NewBlock("entry")
+    // Create and return a static string "Object"
+    strPtr := cg.genStringConstantPtr("Object")
+    tnBlock.NewRet(strPtr)
+
+    copyFn := cg.module.NewFunc(
+        "Object_copy",
+        cg.getClassPtrType("Object"),
+        ir.NewParam("self", cg.getClassPtrType("Object")),
+    )
+    copyBlock := copyFn.NewBlock("entry")
+
+    mallocFn := findFuncByName(cg.module, "malloc")
+    sizeConst := constant.NewInt(types.I64, cg.typeSize(cg.objectStruct))
+    rawPtr := copyBlock.NewCall(mallocFn, sizeConst)
+    newObj := copyBlock.NewBitCast(rawPtr, cg.getClassPtrType("Object"))
+
+    selfVal := copyBlock.NewBitCast(copyFn.Params[0], cg.getClassPtrType("Object"))
+    srcVtablePtr := copyBlock.NewGetElementPtr(
+        cg.objectStruct,
+        selfVal,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    dstVtablePtr := copyBlock.NewGetElementPtr(
+        cg.objectStruct,
+        newObj,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    vtableVal := copyBlock.NewLoad(types.NewPointer(types.I8), srcVtablePtr)
+    copyBlock.NewStore(vtableVal, dstVtablePtr)
+
+    copyBlock.NewRet(newObj)
+}
+

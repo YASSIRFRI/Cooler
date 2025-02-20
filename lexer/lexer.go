@@ -40,6 +40,7 @@ var reserved = map[string]string{
     "self":     "SELF",
     "isvoid":   "ISVOID",
     "array":    "ARRAY", // Added for array support
+    "import":   "IMPORT", // Added for package system support
 }
 
 func NewLexer(input string) *Lexer {
@@ -103,6 +104,7 @@ func (lx *Lexer) nextToken() *Token {
         return &Token{Type: "NOT", Value: text, Line: lx.line}
     }
 
+    // Package names and types must start with a capital letter.
     if m, text := lx.matchRegex(`^[A-Z][A-Za-z0-9_]*`); m {
         lx.pos += len(text)
         return &Token{Type: "TYPE", Value: text, Line: lx.line}
@@ -179,10 +181,10 @@ func (lx *Lexer) nextToken() *Token {
     case '@':
         lx.pos++
         return &Token{Type: "AT", Value: "@", Line: lx.line}
-    case '[': // Added bracket support
+    case '[':
         lx.pos++
         return &Token{Type: "LBRACKET", Value: "[", Line: lx.line}
-    case ']': // Added bracket support
+    case ']':
         lx.pos++
         return &Token{Type: "RBRACKET", Value: "]", Line: lx.line}
     default:

@@ -85,13 +85,63 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 	// Note: String is a basic class and should not be redefined.
 	// Object is the root; no parent needed.
 
-	// 2) Add IO methods to the global table.
+	// 2) Add Object methods to the global table.
+	sa.addObjectMethods()
+
+	// 3) Add IO methods to the global table.
 	sa.addIOMethods()
 
-	// 3) Add built-in String methods.
+	// 4) Add built-in String methods.
 	sa.addStringMethods()
 
 	return sa
+}
+
+// --------------------------------------------------------
+//          OBJECT METHODS INTEGRATION
+// --------------------------------------------------------
+func (sa *SemanticAnalyzer) addObjectMethods() {
+	methods := []struct {
+		fullName   string
+		methodName string
+		returnType string
+		paramNames []string
+		paramTypes []string
+	}{
+		{
+			fullName:   "Object.abort",
+			methodName: "abort",
+			returnType: "Object",
+			paramNames: nil,
+			paramTypes: nil,
+		},
+		{
+			fullName:   "Object.type_name",
+			methodName: "type_name",
+			returnType: "String",
+			paramNames: nil,
+			paramTypes: nil,
+		},
+		{
+			fullName:   "Object.copy",
+			methodName: "copy",
+			returnType: "SELF_TYPE",
+			paramNames: nil,
+			paramTypes: nil,
+		},
+	}
+
+	for _, m := range methods {
+		_ = sa.global.Add(m.fullName, &SymbolEntry{
+			Name: m.methodName,
+			Type: m.returnType,
+			Method: &MethodSignature{
+				ParamNames: m.paramNames,
+				ParamTypes: m.paramTypes,
+				ReturnType: m.returnType,
+			},
+		})
+	}
 }
 
 // --------------------------------------------------------
@@ -196,9 +246,6 @@ func (sa *SemanticAnalyzer) addStringMethods() {
 	}
 }
 
-// --------------------------------------------------------
-//          PUBLIC INTERFACES
-// --------------------------------------------------------
 func (sa *SemanticAnalyzer) Errors() []string {
 	return sa.errors
 }
@@ -617,8 +664,6 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 			}
 			return "Int"
 		case "<", "<=", "=":
-			// Use join to compute common supertype if needed.
-			// (For simplicity we expect the types to be comparable.)
 			if leftT != rightT {
 				sa.verbosef("getExprType(binaryOp)",
 					"comparison operator %q between incompatible types %q and %q",
