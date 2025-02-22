@@ -271,13 +271,12 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
             constant.NewInt(types.I32, 0),
         )
         cg.currentBlock.NewStore(vtPtr, vtableField)
-
         entryFn = fn
         cg.currentBlock.NewCall(entryFn, mainObj)
     }
-    if entryFn != nil {
-        cg.currentBlock.NewCall(entryFn)
-    }
+    //if entryFn != nil {
+        //cg.currentBlock.NewCall(entryFn)
+    //}
     cg.currentBlock.NewRet(constant.NewInt(types.I32, 0))
 
     return cg.module
