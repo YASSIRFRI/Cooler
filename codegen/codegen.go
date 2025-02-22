@@ -217,6 +217,8 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.defineStringConcat()
     cg.declareExit()
     cg.defineObjectBuiltins()
+    cg.defineIOBuiltins() 
+
     cg.defineStringSubstr()
 
     mainFn := cg.module.NewFunc("main", types.I32)
@@ -291,8 +293,20 @@ func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
     })
     cg.createVTableGlobal("Int", []DispatchEntry{})
     cg.createVTableGlobal("String", []DispatchEntry{})
-    cg.createVTableGlobal("Bool", []DispatchEntry{})
-    cg.createVTableGlobal("IO", []DispatchEntry{})
+    cg.createVTableGlobal("Bool", []DispatchEntry{
+        {Class: "Object", Method: "abort"},
+        {Class: "Object", Method: "type_name"},
+        {Class: "Object", Method: "copy"},
+    })
+    cg.createVTableGlobal("IO", []DispatchEntry{
+        {Class: "Object", Method: "abort"},
+        {Class: "Object", Method: "type_name"},
+        {Class: "Object", Method: "copy"},
+        {Class: "IO", Method: "out_string"},
+        {Class: "IO", Method: "out_int"},
+        {Class: "IO", Method: "in_string"},
+        {Class: "IO", Method: "in_int"},
+    })
 }
 
 func (cg *CodeGenerator) createVTableGlobal(className string, layout []DispatchEntry) {
@@ -725,10 +739,20 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
 
     var layout []DispatchEntry
     // Inherit parent's layout first
-    if classNode.Inherits != "" && !isBuiltIn(classNode.Inherits) {
-        cg.buildDispatchTable(classMap[classNode.Inherits], classMap)
-        parentLayout := cg.dispatchTableLayouts[classNode.Inherits]
-        layout = append(layout, parentLayout...)
+    if classNode.Inherits != "" {
+        if isBuiltIn(classNode.Inherits) {
+            if parentLayout, exists := cg.dispatchTableLayouts[classNode.Inherits]; exists {
+                layout = append(layout, parentLayout...)
+            }
+        } else {
+            parentNode := classMap[classNode.Inherits]
+            if parentNode != nil {
+                cg.buildDispatchTable(parentNode, classMap)
+                if parentLayout, exists := cg.dispatchTableLayouts[parentNode.Name]; exists {
+                    layout = append(layout, parentLayout...)
+                }
+            }
+        }
     }
     for _, feat := range classNode.Features {
         if m, ok := feat.(*parser.Method); ok {
@@ -1199,8 +1223,10 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                 default:
                     return constant.NewNull(types.NewPointer(types.I8))
                 }
+            }else{
+                return cg.currentBlock.NewCall(builtinFn, args...)
             }
-            return cg.currentBlock.NewCall(builtinFn, args...)
+            return constant.NewNull(types.NewPointer(types.I8))
         }
 
         key := fmt.Sprintf("%s.%s", staticType, n.Method.Ident)
@@ -1465,4 +1491,120 @@ func (cg *CodeGenerator) defineObjectBuiltins() {
     copyBlock.NewStore(vtableVal, dstVtablePtr)
 
     copyBlock.NewRet(newObj)
+}
+
+func (cg *CodeGenerator) defineIOBuiltins() {
+    // IO_out_string
+    outStringFn := cg.module.NewFunc(
+        "IO_out_string",
+        cg.getClassPtrType("IO"),
+        ir.NewParam("self", cg.getClassPtrType("IO")),
+        ir.NewParam("str", cg.stringType),
+    )
+    block := outStringFn.NewBlock("entry")
+    strPtr := block.NewGetElementPtr(
+        cg.stringStruct,
+        outStringFn.Params[1],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    charPtr := block.NewLoad(types.NewPointer(types.I8), strPtr)
+    fmtPtr := block.NewGetElementPtr(
+        cg.fmtString.Type().(*types.PointerType).ElemType,
+        cg.fmtString,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    block.NewCall(cg.printfFunc, fmtPtr, charPtr)
+    block.NewRet(outStringFn.Params[0])
+
+    // IO_out_int
+    outIntFn := cg.module.NewFunc(
+        "IO_out_int",
+        cg.getClassPtrType("IO"),
+        ir.NewParam("self", cg.getClassPtrType("IO")),
+        ir.NewParam("int", cg.getClassPtrType("Int")),
+    )
+    block = outIntFn.NewBlock("entry")
+    intPtr := block.NewGetElementPtr(
+        cg.intStruct,
+        outIntFn.Params[1],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    intVal := block.NewLoad(types.I32, intPtr)
+    fmtPtr = block.NewGetElementPtr(
+        cg.fmtInt.Type().(*types.PointerType).ElemType,
+        cg.fmtInt,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    block.NewCall(cg.printfFunc, fmtPtr, intVal)
+    block.NewRet(outIntFn.Params[0])
+
+    // IO_in_string
+    inStringFn := cg.module.NewFunc(
+        "IO_in_string",
+        cg.stringType,
+        ir.NewParam("self", cg.getClassPtrType("IO")),
+    )
+    block = inStringFn.NewBlock("entry")
+    bufAlloca := block.NewAlloca(types.NewArray(1024, types.I8))
+    ptr := block.NewGetElementPtr(
+        bufAlloca.ElemType,
+        bufAlloca,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    fmtPtr = block.NewGetElementPtr(
+        cg.fmtStringIn.Type().(*types.PointerType).ElemType,
+        cg.fmtStringIn,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    block.NewCall(cg.scanfFunc, fmtPtr, ptr)
+    
+    mallocFn := findFuncByName(cg.module, "malloc")
+    sizeStringObj := constant.NewInt(types.I64, cg.typeSize(cg.stringStruct))
+    newStringObjRaw := block.NewCall(mallocFn, sizeStringObj)
+    newStringObj := block.NewBitCast(newStringObjRaw, cg.stringType)
+    
+    charFieldPtr := block.NewGetElementPtr(
+        cg.stringStruct,
+        newStringObj,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    block.NewStore(ptr, charFieldPtr)
+    block.NewRet(newStringObj)
+
+    // IO_in_int
+    inIntFn := cg.module.NewFunc(
+        "IO_in_int",
+        cg.getClassPtrType("Int"),
+        ir.NewParam("self", cg.getClassPtrType("IO")),
+    )
+    block = inIntFn.NewBlock("entry")
+    allocaI32 := block.NewAlloca(types.I32)
+    fmtPtr = block.NewGetElementPtr(
+        cg.fmtIntIn.Type().(*types.PointerType).ElemType,
+        cg.fmtIntIn,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    block.NewCall(cg.scanfFunc, fmtPtr, allocaI32)
+    loadedVal := block.NewLoad(types.I32, allocaI32)
+    
+    // Box the integer
+    size := constant.NewInt(types.I64, cg.typeSize(cg.intStruct))
+    rawPtr := block.NewCall(mallocFn, size)
+    intObj := block.NewBitCast(rawPtr, cg.getClassPtrType("Int"))
+    fieldPtr := block.NewGetElementPtr(
+        cg.intStruct,
+        intObj,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    block.NewStore(loadedVal, fieldPtr)
+    block.NewRet(intObj)
 }
