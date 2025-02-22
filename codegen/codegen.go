@@ -247,12 +247,9 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
         cg.buildDispatchTable(classNode, classMap)
     }
 
-    // 4) Generate method bodies
     for _, classNode := range prog.Classes {
         cg.generateMethodBodies(classNode)
     }
-
-    // If there's a "Main_main", call it. Else try fallback
     var entryFn *ir.Func
     if fn := findFuncByName(cg.module, "Main_main"); fn != nil {
         mallocFn := findFuncByName(cg.module, "malloc")
@@ -260,7 +257,6 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
         mainSize := constant.NewInt(types.I64, cg.typeSize(cg.classTypes["Main"]))
         mainRaw := cg.currentBlock.NewCall(mallocFn, mainSize)
         mainObj := cg.currentBlock.NewBitCast(mainRaw, mainType)
-
 
         vtGlobal := cg.dispatchTables["Main"]
         vtPtr := cg.currentBlock.NewBitCast(vtGlobal, types.NewPointer(types.I8))
@@ -274,11 +270,7 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
         entryFn = fn
         cg.currentBlock.NewCall(entryFn, mainObj)
     }
-    //if entryFn != nil {
-        //cg.currentBlock.NewCall(entryFn)
-    //}
     cg.currentBlock.NewRet(constant.NewInt(types.I32, 0))
-
     return cg.module
 }
 
