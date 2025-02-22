@@ -223,6 +223,7 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.currentFunc = mainFn
     cg.currentBlock = mainFn.NewBlock("entry")
 
+
     classMap := make(map[string]*parser.Class)
     for _, classNode := range prog.Classes {
         classMap[classNode.Name] = classNode
@@ -254,17 +255,26 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     // If there's a "Main_main", call it. Else try fallback
     var entryFn *ir.Func
     if fn := findFuncByName(cg.module, "Main_main"); fn != nil {
-        entryFn = fn
-    } else {
-        for _, cls := range prog.Classes {
-            tryName := fmt.Sprintf("%s_main", cls.Name)
-            if fn := findFuncByName(cg.module, tryName); fn != nil {
-                entryFn = fn
-                break
-            }
-        }
-    }
+        mallocFn := findFuncByName(cg.module, "malloc")
+        mainType := cg.getClassPtrType("Main")
+        mainSize := constant.NewInt(types.I64, cg.typeSize(cg.classTypes["Main"]))
+        mainRaw := cg.currentBlock.NewCall(mallocFn, mainSize)
+        mainObj := cg.currentBlock.NewBitCast(mainRaw, mainType)
 
+
+        vtGlobal := cg.dispatchTables["Main"]
+        vtPtr := cg.currentBlock.NewBitCast(vtGlobal, types.NewPointer(types.I8))
+        vtableField := cg.currentBlock.NewGetElementPtr(
+            cg.classTypes["Main"],
+            mainObj,
+            constant.NewInt(types.I32, 0),
+            constant.NewInt(types.I32, 0),
+        )
+        cg.currentBlock.NewStore(vtPtr, vtableField)
+
+        entryFn = fn
+        cg.currentBlock.NewCall(entryFn, mainObj)
+    }
     if entryFn != nil {
         cg.currentBlock.NewCall(entryFn)
     }
@@ -543,7 +553,6 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
         return cg.classTypes[classNode.Name]
     }
 
-    // 1. Create opaque struct upfront if it doesn't exist
     if _, exists := cg.classTypes[classNode.Name]; !exists {
         opaqueStruct := types.NewStruct()
         opaqueStruct.SetName(classNode.Name + "_struct")
@@ -552,7 +561,6 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
         cg.classPtrTypes[classNode.Name] = types.NewPointer(opaqueStruct)
     }
 
-    // 2. Return existing struct if already processed
     if st, ok := cg.classTypes[classNode.Name].(*types.StructType); ok && len(st.Fields) > 0 {
         return st
     }
@@ -564,10 +572,8 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
     if classNode.Inherits != "" && !isBuiltIn(classNode.Inherits) {
         parentNode := classMap[classNode.Inherits]
         if parentNode != nil {
-            // Recursively create parent type first
             parentType := cg.createClassType(parentNode, classMap)
             if parentStruct, ok := parentType.(*types.StructType); ok {
-                // Skip vtable field (index 0)
                 if len(parentStruct.Fields) > 1 {
                     fieldTypes = append(fieldTypes, parentStruct.Fields[1:]...)
                     index = len(fieldTypes)
@@ -602,10 +608,8 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
         }
     }
 
-    // 5. Update the opaque struct with actual fields
     userStruct := cg.classTypes[classNode.Name].(*types.StructType)
     userStruct.Fields = fieldTypes
-    
     return userStruct
 }
 
@@ -628,7 +632,7 @@ func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) 
         }
     }
 
-    selfParam := ir.NewParam("self", cg.getClassPtrType("Object"))
+    selfParam := ir.NewParam("self", cg.getClassPtrType(className))
     params := []*ir.Param{selfParam}
     for _, f := range method.Formals {
         var ptype types.Type
@@ -756,22 +760,21 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
         key := fmt.Sprintf("%s.%s", classNode.Name, entry.Method)
         cg.methodIndices[key] = i
     }
-
-    commonSelfType := cg.getClassPtrType("Object")
-    commonMethodFnType := types.NewFunc(commonSelfType, commonSelfType)
-    commonMethodPtrType := types.NewPointer(commonMethodFnType)
-    arrType := types.NewArray(uint64(len(layout)), commonMethodPtrType)
-
+    
+    //commonSelfType := cg.getClassPtrType("Object")
+    //commonMethodFnType := types.NewFunc(commonSelfType, commonSelfType)
+    //commonMethodPtrType := types.NewPointer(commonMethodFnType)
+    arrType := types.NewArray(uint64(len(layout)), types.NewPointer(types.I8))
     elems := make([]constant.Constant, len(layout))
     for i, entry := range layout {
         fnName := fmt.Sprintf("%s_%s", entry.Class, entry.Method)
         fn := findFuncByName(cg.module, fnName)
-        if fn == nil {
-            elems[i] = constant.NewNull(commonMethodPtrType)
-        } else {
+        if fn != nil {
+            // Cast the function to an i8* pointer
             ptr := constant.NewBitCast(fn, types.NewPointer(types.I8))
-            casted := constant.NewBitCast(ptr, commonMethodPtrType)
-            elems[i] = casted
+            elems[i] = ptr
+        } else {
+            elems[i] = constant.NewNull(types.NewPointer(types.I8))
         }
     }
 
@@ -1045,10 +1048,8 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                 vtPtr := constant.NewBitCast(vtGlobal, types.NewPointer(arrType))
                 vtableAsI8Ptr = constant.NewBitCast(vtPtr, types.NewPointer(types.I8))
             } else {
-                // fallback
                 vtableAsI8Ptr = constant.NewBitCast(vtGlobal, types.NewPointer(types.I8))
             }
-            // store in object
             field0 := cg.currentBlock.NewGetElementPtr(
                 st, objPtr,
                 constant.NewInt(types.I32, 0),
@@ -1243,8 +1244,8 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             constant.NewInt(types.I32, 0),
             constant.NewInt(types.I32, int64(idx)),
         )
-        methodPtr := cg.currentBlock.NewLoad(commonMethodPtrType, methodPtrPtr)
-
+        //methodPtr := cg.currentmethodPtr := cg.currentBlock.NewLoad(types.NewPointer(types.I8), methodPtrPtrBlock.NewLoad(commonMethodPtrType, methodPtrPtr)
+        methodPtr := cg.currentBlock.NewLoad(types.NewPointer(types.I8), methodPtrPtr)
         // bitcast to the actual function type
         staticFnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
         staticFn := findFuncByName(cg.module, staticFnName)
@@ -1474,4 +1475,3 @@ func (cg *CodeGenerator) defineObjectBuiltins() {
 
     copyBlock.NewRet(newObj)
 }
-

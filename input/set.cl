@@ -1,162 +1,157 @@
-class BinaryTrieSet inherits IO { 
-    root : BinaryTrieNode; 
-    bits : Int;
 
-    init_set() : BinaryTrieSet {
+
+class Node {
+    value : Int;
+    next  : Node;
+
+    get_value() : Int {
+        value
+    };
+
+    set_value(v : Int) : Node {
         {
-            root <- new BinaryTrieNode;
-            root.init_node();
-            bits <- 16;   -- or 32 for 32-bit
+            value <- v;
             self;
         }
     };
 
-    pow(exp : Int) : Int {
-        let result : Int <- 1 in {
-            let i : Int <- 1 in {
-                while i <= exp loop {
-                    result <- result * 2;
-                    i <- i + 1;
-                } pool;
-                result
-            }
+    get_next() : Node {
+        next
+    };
+
+    set_next(n : Node) : Node {
+        {
+            next <- n;
+            self;
         }
     };
 
-    mod(a : Int, b : Int) : Int {
-        let q : Int <- a / b in {
-            a - q * b
+    init_node() : Node {
+        {
+            value <- 0;
+            next <- self;
+            self;
         }
     };
-
-    get_bit(value : Int, bit_pos : Int) : Int {
-        let divisor : Int <- pow(bit_pos) in {
-            let quotient : Int <- value / divisor in {
-                mod(quotient, 2)
-            }
-        }
-    };
-
-insert(val : Int) : BinaryTrieSet {
-    let current : BinaryTrieNode <- root in {
-        let i : Int <- bits - 1 in {
-            while not (i < 0) loop {  -- using not (i < 0) instead of i >= 0
-                let bit_val : Int <- get_bit(val, i) in {
-                    if bit_val = 0 then
-                        if current.get_zero_child() = void then
-                            let new_node : BinaryTrieNode <- new BinaryTrieNode in {
-                                new_node.init_node();
-                                current.set_zero_child(new_node);
-                            }
-                        fi;
-                        current <- current.get_zero_child();
-                    else
-                        if current.get_one_child() = void then {
-                            let new_node : BinaryTrieNode <- new BinaryTrieNode in {
-                                new_node.init_node();
-                                current.set_one_child(new_node);
-                            }
-                        } fi;
-                        current <- current.get_one_child();
-                    fi;
-                };
-                i <- i - 1;
-            } pool;
-            current.set_is_end(true);
-            self
-        }
-    }
 };
 
-    search(val : Int) : Bool {
-        let current : BinaryTrieNode <- root in {
-            let i : Int <- bits - 1 in {
-                let found : Bool <- true in {
-                    while not (i < 0) loop {
-                        let bit_val : Int <- get_bit(val, i) in {
-                            if bit_val = 0 then
-                                if current.get_zero_child() = void then {
-                                    found <- false;
-                                    i <- -1;  -- break the loop
-                                } else {
-                                    current <- current.get_zero_child();
-                                } fi;
-                            else
-                                if current.get_one_child() = void then {
-                                    found <- false;
-                                    i <- -1;  -- break the loop
-                                } else {
-                                    current <- current.get_one_child();
-                                } fi;
-                            fi;
-                        };
-                        i <- i - 1;
-                    } pool;
-                    if found and current.get_is_end() then
-                        true
-                    else
-                        false
-                    fi
-                }
-            }
+class LinkedList inherits IO {
+    head : Node;
+
+    init_list() : LinkedList {
+        {
+            head <- new Node;
+            head.init_node();
+            self;
         }
     };
 
-    print_all() : BinaryTrieSet {
-        {
-            recurse_print(root, 0, bits - 1);
+    insert(val : Int) : LinkedList {
+        let new_node : Node <- new Node in {
+            new_node.set_value(val);
+            new_node.set_next(head.get_next());
+            head.set_next(new_node);
+            self;
+        }
+    };
+
+    print() : LinkedList {
+        let temp : Node <- head.get_next() in {
+            while not (temp = head) loop {
+                out_int(temp.get_value());
+                out_string(" ");
+                temp <- temp.get_next();
+            } pool;
             out_string("\n");
             self;
         }
     };
 
-recurse_print(n : BinaryTrieNode, current_val : Int, bit_pos : Int) : Void {
-    if n = void then {
-        -- do nothing
-    } else {
-        if bit_pos < 0 then
-            if n.get_is_end() then {
-                out_int(current_val);
-                out_string(" ");
-            } fi;
-        else {
-            let zero_node : BinaryTrieNode <- n.get_zero_child() in {
-                recurse_print(zero_node, current_val, bit_pos - 1);
-            };
-            let one_node : BinaryTrieNode <- n.get_one_child() in {
-                let add : Int <- pow(bit_pos) in {
-                    recurse_print(one_node, current_val + add, bit_pos - 1);
-                }
+    -- Search for a value in the list. Returns true if found, false otherwise.
+    search(val : Int) : Bool {
+        let temp : Node <- head.get_next() in {
+            let found : Bool <- false in {
+                while not (temp = head) loop {
+                    if temp.get_value() = val then {
+                        found <- true;
+                        temp <- head;  -- Force exit from loop
+                    } else {
+                        temp <- temp.get_next();
+                    } fi;
+                } pool;
+                found
             }
         }
-    }
+    };
 };
-};
 
-class Main inherits IO { 
-    main() : Object { let my_set : BinaryTrieSet <- new BinaryTrieSet in { my_set.init_set();
-        -- Insert numbers 1 through 10 into the set
-        let i : Int <- 1 in {
-            while i <= 10 loop {
-                my_set.insert(i);
-                i <- i + 1;
-            } pool;
-        };
+-- Very dumb Set implementation:
+-- 1) Internally uses a LinkedList (unoptimized).
+-- 2) On insert, we check if the value is already present using 'search'.
+-- 3) If it's not present, we insert it. Otherwise, we do nothing.
+class DumbSet inherits IO {
+    l : LinkedList;
 
-        out_string("Elements in set (ascending order):\n");
-        my_set.print_all();
+    init_set() : DumbSet {
+        {
+            l <- new LinkedList;
+            l.init_list();
+            self;
+        }
+    };
 
-        out_string("Enter a value to search: ");
-        let search_val : Int <- in_int() in {
-            if my_set.search(search_val) then
-                out_string("Value found.\n")
-            else
-                out_string("Value not found.\n")
-            fi
-        };
-
-        my_set.print_all();
+    insert(val : Int) : DumbSet {
+        {
+            if not l.search(val) then
+                l.insert(val)
+            else {}
+            fi;
         self;
-    }
+        }
+    };
+
+    has(val : Int) : Bool {
+        l.search(val)
+    };
+
+    print_set() : DumbSet {
+        {
+            l.print();
+            self;
+        }
+    };
 };
+
+class Main inherits IO {
+    main() : Object {
+        let s : DumbSet <- new DumbSet in {
+            s.init_set();
+
+            -- Insert some values.
+            s.insert(1);
+            s.insert(2);
+            s.insert(3);
+            s.insert(2);  -- Duplicate insert (won't be inserted again)
+
+            out_string("Current set contents:\n");
+            s.print_set();
+
+            -- Check membership
+            out_string("Check if 2 is in the set: ");
+            if s.has(2) then
+                out_string("Yes\n")
+            else
+                out_string("No\n")
+            fi;
+
+            out_string("Check if 99 is in the set: ");
+            if s.has(99) then
+                out_string("Yes\n")
+            else
+                out_string("No\n")
+            fi;
+
+            self;
+        }
+    };
 };

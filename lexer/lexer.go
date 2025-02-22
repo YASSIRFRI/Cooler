@@ -39,8 +39,8 @@ var reserved = map[string]string{
     "new":      "NEW",
     "self":     "SELF",
     "isvoid":   "ISVOID",
-    "array":    "ARRAY", // Added for array support
-    "import":   "IMPORT", // Added for package system support
+    "array":    "ARRAY", 
+    "import":   "IMPORT",
 }
 
 func NewLexer(input string) *Lexer {
