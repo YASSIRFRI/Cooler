@@ -10,7 +10,6 @@ class Main inherits IO {
                             j <- j + 1;
                         } pool;
                     };
-
                     -- Print stars (2*i - 1 stars per row)
                     let k : Int <- 1 in {
                         while k <= ((2 * i) - 1) loop {
@@ -18,7 +17,6 @@ class Main inherits IO {
                             k <- k + 1;
                         } pool;
                     };
-
                     out_string("\n");
                     i <- i + 1;
                 } pool;

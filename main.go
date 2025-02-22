@@ -41,7 +41,22 @@ func main() {
 	fmt.Println("\033[1;34m========================================\033[0m")
 	fmt.Printf("Compiling %s...\n", sourceFile)
 
-	lx := lexer.NewLexer(string(srcBytes))
+	ms := lexer.NewModuleSystem()
+    expandedSource, err := lexer.ExpandImports(string(srcBytes), ".", ms)
+    if err != nil {
+        log.Fatalf("Import expansion error: %v\n", err)
+    }
+
+    if ms.HasErrors() {
+        // We have recorded import errors
+        for _, e := range ms.Errors() {
+            fmt.Printf("Import error: %v\n", e)
+        }
+        // handle or exit
+        return
+    }
+
+	lx := lexer.NewLexer(expandedSource)
 	var tokens []*lexer.Token
 	for tok := lx.NextToken(); tok != nil; tok = lx.NextToken() {
 		tokens = append(tokens, tok)

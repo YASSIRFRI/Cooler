@@ -1,3 +1,5 @@
+import Module;
+
 class Main inherits IO {
     main() : Object {
         let rows : Int <- 5 in {  -- Number of pyramid rows
