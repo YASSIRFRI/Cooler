@@ -1830,5 +1830,6 @@ func (cg *CodeGenerator) defineArrayMethods() {
     lenVal := entry.NewLoad(types.I64, lenPtr)
     len32 := entry.NewTrunc(lenVal, types.I32)
     boxedInt := cg.boxInt(len32)
+    
     entry.NewRet(boxedInt)
 }
