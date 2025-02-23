@@ -80,7 +80,8 @@ func isBuiltIn(className string) bool {
         className == "Int" ||
         className == "String" ||
         className == "Bool" ||
-        className == "IO"
+        className == "IO"||
+        className == "Array"
 }
 
 // Boxing/unboxing Int and Bool
@@ -88,10 +89,10 @@ func (cg *CodeGenerator) boxInt(val value.Value) value.Value {
     size := constant.NewInt(types.I64, cg.typeSize(cg.intStruct))
     mallocFn := findFuncByName(cg.module, "malloc")
     if mallocFn == nil {
-        fmt.Println("Error: malloc function not found")
+        //fmt.Println("Error: malloc function not found")
         return nil
     }
-    fmt.Printf("checking nill %s",cg.currentBlock);
+    //fmt.Printf("checking nill %s",cg.currentBlock);
     rawPtr := cg.currentBlock.NewCall(mallocFn, size)
     intObj := cg.currentBlock.NewBitCast(rawPtr, cg.getClassPtrType("Int"))
     fieldPtr := cg.currentBlock.NewGetElementPtr(
@@ -1106,12 +1107,10 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         rawPtr := cg.currentBlock.NewCall(mallocFn, sizeConst)
         arrObj := cg.currentBlock.NewBitCast(rawPtr, cg.getClassPtrType("Array"))
     
-        // 2. Initialize with initial capacity
         initialSize := constant.NewInt(types.I64, 8) // Start with space for 8 elements
         dataSize := cg.currentBlock.NewMul(initialSize, constant.NewInt(types.I64, 8))
         dataPtr := cg.currentBlock.NewCall(mallocFn, dataSize)
     
-        // 3. Set length to 0
         lenPtr := cg.currentBlock.NewGetElementPtr(
             cg.arrayStruct, arrObj,
             constant.NewInt(types.I32, 0), 
@@ -1119,7 +1118,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         )
         cg.currentBlock.NewStore(constant.NewInt(types.I64, 0), lenPtr)
     
-        // 4. Store data pointer
         arrayDataPtr := cg.currentBlock.NewGetElementPtr(
             cg.arrayStruct, arrObj,
             constant.NewInt(types.I32, 0),
@@ -1127,7 +1125,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         )
         cg.currentBlock.NewStore(dataPtr, arrayDataPtr)
     
-        // 5. Set vtable pointer
         if vtGlobal, ok := cg.dispatchTables["Array"]; ok {
             vtablePtr := cg.currentBlock.NewBitCast(vtGlobal, types.NewPointer(types.I8))
             vtField := cg.currentBlock.NewGetElementPtr(
@@ -1264,17 +1261,24 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                 }
             }
             if staticType == "Array" {
+                fmt.Println("Array method: ", n.Method.Ident)
                 switch n.Method.Ident {
                 case "get":
                     arrayGetFn := findFuncByName(cg.module, "Array_get")
                     if arrayGetFn == nil {
+                        fmt.Println("Array_get not found")
                         return constant.NewNull(types.NewPointer(types.I8))
                     }
+                    fmt.Println("Array_get found")
                     indexVal := cg.genExpr(n.Method.Params[0])
                     unboxedIndex := cg.unboxInt(indexVal)
                     index64 := cg.currentBlock.NewSExt(unboxedIndex, types.I64)
                     args := []value.Value{receiver, index64}
-                    return cg.currentBlock.NewCall(arrayGetFn, args...)
+                    // Call Array_get to retrieve the element
+                    elemPtr := cg.currentBlock.NewCall(arrayGetFn, args...)
+                    // Cast the i8* result to IntStruct*
+                    intPtr := cg.currentBlock.NewBitCast(elemPtr, cg.getClassPtrType("Int"))
+                    return intPtr
                 case "set":
                     arraySetFn := findFuncByName(cg.module, "Array_set")
                     if arraySetFn == nil {
@@ -1289,7 +1293,19 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                     args := []value.Value{receiver, index64, valuePtr}
                     cg.currentBlock.NewCall(arraySetFn, args...)
                     return receiver
+                case "resize":
+                    arrayResizeFn := findFuncByName(cg.module, "Array_resize")
+                    if arrayResizeFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    sizeVal := cg.genExpr(n.Method.Params[0])
+                    unboxedSize := cg.unboxInt(sizeVal)
+                    size64 := cg.currentBlock.NewSExt(unboxedSize, types.I64)
+                    args := []value.Value{receiver, size64}
+                    res := cg.currentBlock.NewCall(arrayResizeFn, args...)
+                    return res
                 }
+
             }
             fnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
             builtinFn := findFuncByName(cg.module, fnName)
@@ -1724,7 +1740,21 @@ func (cg *CodeGenerator) defineArrayMethods() {
             ir.NewParam("isvolatile", types.I1),               // is volatile
         )
     }
-    // Array_get implementation
+
+
+    memcpyName := "llvm.memcpy.p0i8.p0i8.i64"
+    memcpyFn := findFuncByName(cg.module, memcpyName)
+    if memcpyFn == nil {
+        memcpyFn = cg.module.NewFunc(
+            memcpyName,
+            types.Void,
+            ir.NewParam("dest", types.NewPointer(types.I8)),
+            ir.NewParam("src", types.NewPointer(types.I8)),
+            ir.NewParam("len", types.I64),
+            ir.NewParam("align", types.I32),
+            ir.NewParam("isvolatile", types.I1),
+        )
+    }
     selfParam := ir.NewParam("self", cg.getClassPtrType("Array"))
     indexParam := ir.NewParam("index", types.I64)
     getFn := cg.module.NewFunc("Array_get", types.NewPointer(types.I8), selfParam, indexParam)
@@ -1809,7 +1839,7 @@ func (cg *CodeGenerator) defineArrayMethods() {
         newSizeParam,
     )
     copySize := entry.NewMul(minSize, elemSize)
-    entry.NewCall(findFuncByName(cg.module, "llvm.memcpy.p0i8.p0i8.i64"),
+    entry.NewCall(memcpyFn,
         newDataRaw,
         oldDataPtr,
         copySize,
@@ -1822,6 +1852,9 @@ func (cg *CodeGenerator) defineArrayMethods() {
     selfParam = ir.NewParam("self", cg.getClassPtrType("Array"))
     lengthFn := cg.module.NewFunc("Array_length", cg.getClassPtrType("Int"), selfParam)
     entry = lengthFn.NewBlock("entry")
+    oldBlock := cg.currentBlock
+    cg.currentBlock = entry
+
     lenPtr = entry.NewGetElementPtr(
         cg.arrayStruct, lengthFn.Params[0],
         constant.NewInt(types.I32, 0),
@@ -1830,6 +1863,6 @@ func (cg *CodeGenerator) defineArrayMethods() {
     lenVal := entry.NewLoad(types.I64, lenPtr)
     len32 := entry.NewTrunc(lenVal, types.I32)
     boxedInt := cg.boxInt(len32)
-    
+    cg.currentBlock = oldBlock
     entry.NewRet(boxedInt)
 }

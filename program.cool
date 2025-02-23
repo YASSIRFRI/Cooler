@@ -5,20 +5,22 @@ class Main inherits IO{
         if isvoid a then {
             out_string("a is null");
         }else{
-            out_string("a is not null");
+            out_string("a is not null\n");
         }fi;
+      out_string("Test 1\n");
       a.resize(3);      
+      out_string("Test 2\n");
       a.set(0, 42);    
       a.set(1, 100);  
       a.set(2, 200); 
       let b : Int in {
         x <- a.get(1);
-        out_string("Test|");
         x <- 1;
-        --out_int(a.get(0)); 
-        out_string("Test2\n");
+        out_int(a.get(0)); 
+        out_string("\n");
         out_int(a.length()); 
-        out_int(a.raw_length());
+        out_string("\n");
+        out_int(a.size());
       }
     }
   };

@@ -77,8 +77,6 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 			Type: b,
 		})
 	}
-	// Set up the inheritance for built-in classes.
-	// In COOL, every type (except Object) inherits from Object.
 	sa.parentOf["Int"] = "Object"
 	sa.parentOf["Bool"] = "Object"
 	sa.parentOf["IO"] = "Object"
@@ -961,7 +959,7 @@ func (sa *SemanticAnalyzer) addArrayMethods() {
 		{
 			fullName:   "Array.get",
 			methodName: "get",
-			returnType: "Int", // or Object if arrays are generic; adjust as needed.
+			returnType: "Int", 
 			paramNames: []string{"index"},
 			paramTypes: []string{"Int"},
 		},
@@ -970,7 +968,6 @@ func (sa *SemanticAnalyzer) addArrayMethods() {
 			methodName: "set",
 			returnType: "Array",
 			paramNames: []string{"index", "value"},
-			// We allow any object for the value; in a full generic system this would be the parameter type.
 			paramTypes: []string{"Int", "Object"},
 		},
 		{
@@ -981,8 +978,8 @@ func (sa *SemanticAnalyzer) addArrayMethods() {
 			paramTypes: []string{},
 		},
 		{
-			fullName:   "Array.raw_length",
-			methodName: "raw_length",
+			fullName:   "Array.size",
+			methodName: "size",
 			returnType: "Int",
 			paramNames: []string{},
 			paramTypes: []string{},
