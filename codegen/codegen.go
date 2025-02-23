@@ -60,6 +60,7 @@ type CodeGenerator struct {
     boolStruct   *types.StructType
     objectStruct *types.StructType
     ioStruct     *types.StructType
+    arrayStruct  *types.StructType
 
     // Because I treat "String" as a pointer to `stringStruct`
     stringType types.Type
@@ -86,6 +87,11 @@ func isBuiltIn(className string) bool {
 func (cg *CodeGenerator) boxInt(val value.Value) value.Value {
     size := constant.NewInt(types.I64, cg.typeSize(cg.intStruct))
     mallocFn := findFuncByName(cg.module, "malloc")
+    if mallocFn == nil {
+        fmt.Println("Error: malloc function not found")
+        return nil
+    }
+    fmt.Printf("checking nill %s",cg.currentBlock);
     rawPtr := cg.currentBlock.NewCall(mallocFn, size)
     intObj := cg.currentBlock.NewBitCast(rawPtr, cg.getClassPtrType("Int"))
     fieldPtr := cg.currentBlock.NewGetElementPtr(
@@ -176,7 +182,6 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.objectStruct.SetName("ObjectStruct")
     cg.module.NewTypeDef("ObjectStruct", cg.objectStruct)
 
-    // Builtin Int: vtable pointer + i32
     cg.intStruct = types.NewStruct(
         types.NewPointer(types.I8),
         types.I32,
@@ -202,24 +207,31 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.ioStruct.SetName("IOStruct")
     cg.module.NewTypeDef("IOStruct", cg.ioStruct)
 
+
+    cg.arrayStruct = types.NewStruct(
+        types.NewPointer(types.I8),
+        types.I64,                
+        types.NewPointer(types.I8),
+    )
+    cg.declareMalloc()
+    cg.arrayStruct.SetName("ArrayStruct")
+    cg.module.NewTypeDef("ArrayStruct", cg.arrayStruct)
     cg.classTypes["Object"] = cg.objectStruct
     cg.classTypes["Int"] = cg.intStruct
     cg.classTypes["Bool"] = cg.boolStruct
     cg.classTypes["String"] = cg.stringStruct
     cg.classTypes["IO"] = cg.ioStruct
-
+    cg.classTypes["Array"] = cg.arrayStruct
+    cg.classPtrTypes["Array"] = types.NewPointer(cg.arrayStruct)
     cg.stringType = types.NewPointer(cg.stringStruct)
-
-    //these will always exist in the executables
     cg.declareExternalIO()
-    cg.declareMalloc()
     cg.defineStringLength()
     cg.defineStringConcat()
     cg.declareExit()
     cg.defineObjectBuiltins()
     cg.defineIOBuiltins() 
-
     cg.defineStringSubstr()
+    cg.defineArrayMethods()
 
     mainFn := cg.module.NewFunc("main", types.I32)
     cg.currentFunc = mainFn
@@ -243,7 +255,6 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
         }
     }
 
-    // 3) Build dispatch tables
     cg.buildDispatchTableForBuiltins()
     for _, classNode := range prog.Classes {
         cg.buildDispatchTable(classNode, classMap)
@@ -307,6 +318,18 @@ func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
         {Class: "IO", Method: "in_string"},
         {Class: "IO", Method: "in_int"},
     })
+
+    cg.createVTableGlobal("Array", []DispatchEntry{
+        {Class: "Object", Method: "abort"},
+        {Class: "Object", Method: "type_name"},
+        {Class: "Object", Method: "copy"},
+        {Class: "Array", Method: "length"},
+        {Class: "Array", Method: "get"},
+        {Class: "Array", Method: "set"},
+        {Class: "Array", Method: "resize"},
+    })
+
+
 }
 
 func (cg *CodeGenerator) createVTableGlobal(className string, layout []DispatchEntry) {
@@ -703,7 +726,6 @@ func (cg *CodeGenerator) generateMethodBodies(classNode *parser.Class) {
 
             retVal := cg.genExpr(method.Body)
 
-            // Box or bitcast if needed
             if !retVal.Type().Equal(fn.Sig.RetType) {
                 if fn.Sig.RetType.Equal(cg.getClassPtrType("Int")) &&
                     retVal.Type().Equal(types.I32) {
@@ -1074,6 +1096,50 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         }
         return objPtr
 
+    
+
+    case *parser.ArrayExpression:
+        mallocFn := findFuncByName(cg.module, "malloc")
+        
+        // 1. Allocate array struct
+        sizeConst := constant.NewInt(types.I64, cg.typeSize(cg.arrayStruct))
+        rawPtr := cg.currentBlock.NewCall(mallocFn, sizeConst)
+        arrObj := cg.currentBlock.NewBitCast(rawPtr, cg.getClassPtrType("Array"))
+    
+        // 2. Initialize with initial capacity
+        initialSize := constant.NewInt(types.I64, 8) // Start with space for 8 elements
+        dataSize := cg.currentBlock.NewMul(initialSize, constant.NewInt(types.I64, 8))
+        dataPtr := cg.currentBlock.NewCall(mallocFn, dataSize)
+    
+        // 3. Set length to 0
+        lenPtr := cg.currentBlock.NewGetElementPtr(
+            cg.arrayStruct, arrObj,
+            constant.NewInt(types.I32, 0), 
+            constant.NewInt(types.I32, 1),
+        )
+        cg.currentBlock.NewStore(constant.NewInt(types.I64, 0), lenPtr)
+    
+        // 4. Store data pointer
+        arrayDataPtr := cg.currentBlock.NewGetElementPtr(
+            cg.arrayStruct, arrObj,
+            constant.NewInt(types.I32, 0),
+            constant.NewInt(types.I32, 2),
+        )
+        cg.currentBlock.NewStore(dataPtr, arrayDataPtr)
+    
+        // 5. Set vtable pointer
+        if vtGlobal, ok := cg.dispatchTables["Array"]; ok {
+            vtablePtr := cg.currentBlock.NewBitCast(vtGlobal, types.NewPointer(types.I8))
+            vtField := cg.currentBlock.NewGetElementPtr(
+                cg.arrayStruct, arrObj,
+                constant.NewInt(types.I32, 0),
+                constant.NewInt(types.I32, 0),
+            )
+            cg.currentBlock.NewStore(vtablePtr, vtField)
+        }
+        
+        return arrObj
+
     case *parser.Let:
         oldEnv := cg.variableEnv
         newEnv := make(map[string]*ir.InstAlloca)
@@ -1195,6 +1261,34 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                         return constant.NewNull(types.NewPointer(types.I8))
                     }
                     return cg.currentBlock.NewCall(substrFn, args[0], args[1], args[2])
+                }
+            }
+            if staticType == "Array" {
+                switch n.Method.Ident {
+                case "get":
+                    arrayGetFn := findFuncByName(cg.module, "Array_get")
+                    if arrayGetFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    indexVal := cg.genExpr(n.Method.Params[0])
+                    unboxedIndex := cg.unboxInt(indexVal)
+                    index64 := cg.currentBlock.NewSExt(unboxedIndex, types.I64)
+                    args := []value.Value{receiver, index64}
+                    return cg.currentBlock.NewCall(arrayGetFn, args...)
+                case "set":
+                    arraySetFn := findFuncByName(cg.module, "Array_set")
+                    if arraySetFn == nil {
+                        return constant.NewNull(types.NewPointer(types.I8))
+                    }
+                    indexVal := cg.genExpr(n.Method.Params[0])
+                    unboxedIndex := cg.unboxInt(indexVal)
+                    index64 := cg.currentBlock.NewSExt(unboxedIndex, types.I64)
+                    // Get value and cast to i8*
+                    valueVal := cg.genExpr(n.Method.Params[1])
+                    valuePtr := cg.currentBlock.NewBitCast(valueVal, types.NewPointer(types.I8))
+                    args := []value.Value{receiver, index64, valuePtr}
+                    cg.currentBlock.NewCall(arraySetFn, args...)
+                    return receiver
                 }
             }
             fnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
@@ -1607,4 +1701,134 @@ func (cg *CodeGenerator) defineIOBuiltins() {
     )
     block.NewStore(loadedVal, fieldPtr)
     block.NewRet(intObj)
+}
+
+
+
+
+
+
+
+func (cg *CodeGenerator) defineArrayMethods() {
+
+    memsetName := "llvm.memset.p0i8.i64"
+    memsetFn := findFuncByName(cg.module, memsetName)
+    if memsetFn == nil {
+        memsetFn = cg.module.NewFunc(
+            memsetName,
+            types.Void,
+            ir.NewParam("dest", types.NewPointer(types.I8)),    // destination
+            ir.NewParam("val", types.I8),                       // value to fill
+            ir.NewParam("len", types.I64),                      // length
+            ir.NewParam("align", types.I32),                    // alignment
+            ir.NewParam("isvolatile", types.I1),               // is volatile
+        )
+    }
+    // Array_get implementation
+    selfParam := ir.NewParam("self", cg.getClassPtrType("Array"))
+    indexParam := ir.NewParam("index", types.I64)
+    getFn := cg.module.NewFunc("Array_get", types.NewPointer(types.I8), selfParam, indexParam)
+    entry := getFn.NewBlock("entry")
+    lenPtr := entry.NewGetElementPtr(
+        cg.arrayStruct, getFn.Params[0],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    len := entry.NewLoad(types.I64, lenPtr)
+    inBounds := entry.NewICmp(enum.IPredULT, getFn.Params[1], len)
+    validBlock := getFn.NewBlock("valid")
+    errorBlock := getFn.NewBlock("error")
+    entry.NewCondBr(inBounds, validBlock, errorBlock)
+    errorBlock.NewRet(constant.NewNull(types.NewPointer(types.I8)))
+
+    dataPtrPtr := validBlock.NewGetElementPtr(
+        cg.arrayStruct, getFn.Params[0],
+        constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 2),
+    )
+    dataPtr := validBlock.NewLoad(types.NewPointer(types.I8), dataPtrPtr)
+    castedDataPtr := validBlock.NewBitCast(dataPtr, types.NewPointer(types.NewPointer(types.I8)))
+    elemPtr := validBlock.NewGetElementPtr(types.NewPointer(types.I8), castedDataPtr, getFn.Params[1])
+    elemVal := validBlock.NewLoad(types.NewPointer(types.I8), elemPtr)
+    validBlock.NewRet(elemVal)
+    selfParam = ir.NewParam("self", cg.getClassPtrType("Array"))
+    indexParam = ir.NewParam("index", types.I64)
+    valueParam := ir.NewParam("value", types.NewPointer(types.I8))
+    setFn := cg.module.NewFunc("Array_set", types.Void, selfParam, indexParam, valueParam)
+    entry = setFn.NewBlock("entry")
+
+    lenPtr = entry.NewGetElementPtr(
+        cg.arrayStruct, setFn.Params[0],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    len = entry.NewLoad(types.I64, lenPtr)
+    inBounds = entry.NewICmp(enum.IPredULT, setFn.Params[1], len)
+    validBlock = setFn.NewBlock("valid")
+    errorBlock = setFn.NewBlock("error")
+    entry.NewCondBr(inBounds, validBlock, errorBlock)
+    errorBlock.NewRet(nil)
+    dataPtrPtr = validBlock.NewGetElementPtr(
+        cg.arrayStruct, setFn.Params[0],
+        constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 2),
+    )
+    dataPtr = validBlock.NewLoad(types.NewPointer(types.I8), dataPtrPtr)
+    castedDataPtr = validBlock.NewBitCast(dataPtr, types.NewPointer(types.NewPointer(types.I8)))
+    elemPtr = validBlock.NewGetElementPtr(types.NewPointer(types.I8), castedDataPtr, setFn.Params[1])
+    validBlock.NewStore(setFn.Params[2], elemPtr)
+    validBlock.NewRet(nil)
+    selfParam = ir.NewParam("self", cg.getClassPtrType("Array"))
+    newSizeParam := ir.NewParam("new_size", types.I64)
+    resizeFn := cg.module.NewFunc("Array_resize", cg.getClassPtrType("Array"), selfParam, newSizeParam)
+    entry = resizeFn.NewBlock("entry")
+    elemSize := constant.NewInt(types.I64, 8)
+    newMemSize := entry.NewMul(newSizeParam, elemSize)
+    mallocFn := findFuncByName(cg.module, "malloc")
+    newDataRaw := entry.NewCall(mallocFn, newMemSize)
+    entry.NewCall(memsetFn,
+        newDataRaw,
+        constant.NewInt(types.I8, 0),
+        newMemSize,
+        constant.NewInt(types.I32, 8),
+        constant.NewInt(types.I1, 0),
+    )
+    oldDataPtrPtr := entry.NewGetElementPtr(
+        cg.arrayStruct, selfParam,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 2),
+    )
+    oldDataPtr := entry.NewLoad(types.NewPointer(types.I8), oldDataPtrPtr)
+    oldLenPtr := entry.NewGetElementPtr(
+        cg.arrayStruct, selfParam,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    oldLen := entry.NewLoad(types.I64, oldLenPtr)
+    minSize := entry.NewSelect(
+        entry.NewICmp(enum.IPredULT, oldLen, newSizeParam),
+        oldLen,
+        newSizeParam,
+    )
+    copySize := entry.NewMul(minSize, elemSize)
+    entry.NewCall(findFuncByName(cg.module, "llvm.memcpy.p0i8.p0i8.i64"),
+        newDataRaw,
+        oldDataPtr,
+        copySize,
+        constant.NewInt(types.I32, 8),
+        constant.NewInt(types.I1, 0),
+    )
+    entry.NewStore(newDataRaw, oldDataPtrPtr)
+    entry.NewStore(newSizeParam, oldLenPtr)
+    entry.NewRet(selfParam)
+    selfParam = ir.NewParam("self", cg.getClassPtrType("Array"))
+    lengthFn := cg.module.NewFunc("Array_length", cg.getClassPtrType("Int"), selfParam)
+    entry = lengthFn.NewBlock("entry")
+    lenPtr = entry.NewGetElementPtr(
+        cg.arrayStruct, lengthFn.Params[0],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    lenVal := entry.NewLoad(types.I64, lenPtr)
+    len32 := entry.NewTrunc(lenVal, types.I32)
+    boxedInt := cg.boxInt(len32)
+    entry.NewRet(boxedInt)
 }

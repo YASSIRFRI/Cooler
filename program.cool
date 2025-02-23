@@ -1,31 +1,25 @@
-import Module;
-
-class Main inherits IO {
-    main() : Object {
-        let rows : Int <- 5 in {  -- Number of pyramid rows
-            let i : Int <- 1 in {
-                while i <= rows loop {
-                    -- Print leading spaces (rows - current row)
-                    let j : Int <- 1 in {
-                        while j <= (rows - i) loop {
-                            out_string(" ");
-                            j <- j + 1;
-                        } pool;
-                    };
-
-                    -- Print stars (2*i - 1 stars per row)
-                    let k : Int <- 1 in {
-                        while k <= ((2 * i) - 1) loop {
-                            out_string("*");
-                            k <- k + 1;
-                        } pool;
-                    };
-
-                    out_string("\n");
-                    i <- i + 1;
-                } pool;
-            };
-            self;
-        }
-    };
+class Main inherits IO{
+    x: Int;
+  main(): Object {
+    let a : Array <-  Array[Int] in {
+        if isvoid a then {
+            out_string("a is null");
+        }else{
+            out_string("a is not null");
+        }fi;
+      a.resize(3);      
+      a.set(0, 42);    
+      a.set(1, 100);  
+      a.set(2, 200); 
+      let b : Int in {
+        x <- a.get(1);
+        out_string("Test|");
+        x <- 1;
+        --out_int(a.get(0)); 
+        out_string("Test2\n");
+        out_int(a.length()); 
+        out_int(a.raw_length());
+      }
+    }
+  };
 };

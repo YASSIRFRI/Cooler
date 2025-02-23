@@ -1,4 +1,3 @@
-// parser_test.go
 package parser
 
 import (
@@ -371,30 +370,25 @@ func TestNestedIfExpression(t *testing.T) {
 	if !ok || cond.Operator != "<" {
 		t.Errorf("expected outer if condition to be binary operation with '<', got %T with op %v", outerIf.Condition, getOp(cond))
 	}
-	// Outer true branch should be an inner If
 	innerIf, ok := outerIf.True.(*If)
 	if !ok {
 		t.Fatalf("expected outer if true branch to be an If, got %T", outerIf.True)
 	}
-	// Inner condition: c = d (assuming '=' is used for equality)
 	innerCond, ok := innerIf.Condition.(*BinaryOperation)
 	if !ok || innerCond.Operator != "=" {
 		t.Errorf("expected inner if condition to be binary operation '=' , got %T with op %v", innerIf.Condition, getOp(innerCond))
 	}
-	// Check that inner if branches are IntConst nodes.
 	if _, ok := innerIf.True.(*IntConst); !ok {
 		t.Errorf("expected inner if true branch to be IntConst, got %T", innerIf.True)
 	}
 	if _, ok := innerIf.False.(*IntConst); !ok {
 		t.Errorf("expected inner if false branch to be IntConst, got %T", innerIf.False)
 	}
-	// Outer false branch should be an IntConst.
 	if _, ok := outerIf.False.(*IntConst); !ok {
 		t.Errorf("expected outer if false branch to be IntConst, got %T", outerIf.False)
 	}
 }
 
-// TestChainedMethodCall tests a method call chain including nested method calls as parameters.
 func TestChainedMethodCall(t *testing.T) {
 	// Example: obj.method1( 1, obj2.method2(2, 3) )
 	input := `obj.method1(1, obj2.method2(2, 3))`
@@ -559,3 +553,48 @@ func getOp(node *BinaryOperation) string {
 	}
 	return node.Operator
 }
+
+
+
+
+func TestArrayExpression(t *testing.T) {
+	input := `
+		class ArrayTest {
+			arr : Array <- Array[Int];
+		};
+	`
+	tokens := tokenize(input)
+	p := NewParser(tokens)
+	prog, err := p.ParseProgram()
+	if err != nil {
+		t.Fatalf("ParseProgram() error: %v", err)
+	}
+	if len(prog.Classes) != 1 {
+		t.Fatalf("expected 1 class, got %d", len(prog.Classes))
+	}
+	class := prog.Classes[0]
+	if class.Name != "ArrayTest" {
+		t.Errorf("expected class name 'ArrayTest', got %s", class.Name)
+	}
+	if len(class.Features) != 1 {
+		t.Fatalf("expected 1 feature, got %d", len(class.Features))
+	}
+	attr, ok := class.Features[0].(*Attribute)
+	if !ok {
+		t.Fatalf("expected feature to be an Attribute, got %T", class.Features[0])
+	}
+	if attr.Ident != "arr" {
+		t.Errorf("expected attribute name 'arr', got %s", attr.Ident)
+	}
+	if attr.Type != "Array" {
+		t.Errorf("expected attribute type 'Array', got %s", attr.Type)
+	}
+	arrExpr, ok := attr.Init.(*ArrayExpression)
+	if !ok {
+		t.Fatalf("expected initializer to be ArrayExpression, got %T", attr.Init)
+	}
+	if arrExpr.ElemType != "Int" {
+		t.Errorf("expected array element type 'Int', got %s", arrExpr.ElemType)
+	}
+}
+

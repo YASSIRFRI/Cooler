@@ -143,6 +143,12 @@ type StringConst struct {
     Value string
 }
 
+type ArrayExpression struct {
+    ElemType string
+}
+
+func (*ArrayExpression) isNode() {}
+
 const (
     _LOWEST = iota
     _ASSIGN      // (for "<-")
@@ -225,7 +231,8 @@ func NewParser(tokens []*lexer.Token) *Parser {
     p.registerPrefix("INT_COMP", p.parseUnaryOperation)
     p.registerPrefix("CASE", p.parseCaseExpression)
 
-    // Infix operators:
+
+    p.registerPrefix("TYPE", p.parseTypeAsArrayExpression)
     p.registerInfix("PLUS", p.parseInfixExpression)
     p.registerInfix("MINUS", p.parseInfixExpression)
     p.registerInfix("MULTIPLY", p.parseInfixExpression)
@@ -237,7 +244,7 @@ func NewParser(tokens []*lexer.Token) *Parser {
     p.registerInfix("DOT", p.parseCallOrMethodCall)
     p.registerInfix("AT", p.parseCallOrMethodCall)
     p.registerInfix("LPAREN", p.parseCallOrMethodCall)
-
+    p.registerPrefix("ARRAY", p.parseArrayExpression)
     return p
 }
 
@@ -851,6 +858,32 @@ func (p *Parser) parseParamsOpt() ([]Node, error) {
     return params, nil
 }
 
+
+
+
+
+
+func (p *Parser) parseArrayExpression() (Node, error) {
+    p.nextToken()
+
+    if p.currentToken() == nil || p.currentToken().Type != "LBRACKET" {
+        return nil, p.errorf("expected '[' after ARRAY")
+    }
+    p.nextToken() 
+    if p.currentToken() == nil || p.currentToken().Type != "TYPE" {
+        return nil, p.errorf("expected type in array declaration, got %v", p.currentToken())
+    }
+    elemType := p.currentToken().Value.(string)
+    p.nextToken() // consume TYPE
+    if p.currentToken() == nil || p.currentToken().Type != "RBRACKET" {
+        return nil, p.errorf("expected ']' after type in array declaration, got %v", p.currentToken())
+    }
+    p.nextToken() 
+
+    return &ArrayExpression{ElemType: elemType}, nil
+}
+
+
 // ----------------------------------------------------
 //               PARSING FEATURES (CLASS BODY)
 // ----------------------------------------------------
@@ -1095,3 +1128,23 @@ func (p *Parser) parseFeatures() ([]Node, error) {
     }
     return features, nil
 }
+
+
+
+func (p *Parser) parseTypeAsArrayExpression() (Node, error) {
+    tok := p.currentToken()
+    if tok == nil {
+        return nil, p.errorf("expected TYPE token, got nil")
+    }
+    // Only accept "Array" as a valid expression if it is followed by '['.
+    if tok.Value != "Array" {
+        return nil, p.errorf("unexpected type token %v in expression", tok.Value)
+    }
+    if p.peekToken() == nil || p.peekToken().Type != "LBRACKET" {
+        return nil, p.errorf("expected '[' after Array")
+    }
+    // Change the token type to ARRAY so that parseArrayExpression works correctly.
+    tok.Type = "ARRAY"
+    return p.parseArrayExpression()
+}
+

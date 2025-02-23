@@ -70,7 +70,7 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 
 	// 1) Create builtin classes.
 	// In COOL the basic classes all exist in the system.
-	builtins := []string{"Object", "Int", "Bool", "String", "IO"}
+	builtins := []string{"Object", "Int", "Bool", "String", "IO","Array"}
 	for _, b := range builtins {
 		_ = sa.global.Add(b, &SymbolEntry{
 			Name: b,
@@ -82,17 +82,14 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 	sa.parentOf["Int"] = "Object"
 	sa.parentOf["Bool"] = "Object"
 	sa.parentOf["IO"] = "Object"
-	// Note: String is a basic class and should not be redefined.
-	// Object is the root; no parent needed.
+	sa.parentOf["String"] = "Object"
+	sa.parentOf["Array"] = "Object"
 
-	// 2) Add Object methods to the global table.
 	sa.addObjectMethods()
-
-	// 3) Add IO methods to the global table.
 	sa.addIOMethods()
-
-	// 4) Add built-in String methods.
 	sa.addStringMethods()
+	sa.addArrayMethods()
+
 
 	return sa
 }
@@ -702,8 +699,14 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 			return "Object"
 		}
 
+
+	case *parser.ArrayExpression:
+		if _, ok := sa.global.Lookup(e.ElemType); !ok {
+			sa.verbosef("getExprType(ArrayExpression)", "undefined element type %q", e.ElemType)
+		}
+		return "Array"
+
 	case *parser.MethodCall:
-		// 1) Get the static type of the object.
 		objType := sa.getExprType(e.Object, scope, currentClass)
 		receiverType := objType
 		if receiverType == "SELF_TYPE" {
@@ -937,3 +940,72 @@ func (sa *SemanticAnalyzer) buildInheritedAttributes(className string, classesBy
 	}
 	return env
 }
+
+
+
+func (sa *SemanticAnalyzer) addArrayMethods() {
+	// Define built-in Array methods.
+	// For simplicity, we assume:
+	//   - get(index: Int): Int       -- returns the element (here we assume Int for testing)
+	//   - set(index: Int, value: Object): Array
+	//   - length(): Int               -- boxed length
+	//   - raw_length(): Int           -- raw length (we use Int to simplify)
+	//   - resize(new_size: Int): Array
+	methods := []struct {
+		fullName   string
+		methodName string
+		returnType string
+		paramNames []string
+		paramTypes []string
+	}{
+		{
+			fullName:   "Array.get",
+			methodName: "get",
+			returnType: "Int", // or Object if arrays are generic; adjust as needed.
+			paramNames: []string{"index"},
+			paramTypes: []string{"Int"},
+		},
+		{
+			fullName:   "Array.set",
+			methodName: "set",
+			returnType: "Array",
+			paramNames: []string{"index", "value"},
+			// We allow any object for the value; in a full generic system this would be the parameter type.
+			paramTypes: []string{"Int", "Object"},
+		},
+		{
+			fullName:   "Array.length",
+			methodName: "length",
+			returnType: "Int",
+			paramNames: []string{},
+			paramTypes: []string{},
+		},
+		{
+			fullName:   "Array.raw_length",
+			methodName: "raw_length",
+			returnType: "Int",
+			paramNames: []string{},
+			paramTypes: []string{},
+		},
+		{
+			fullName:   "Array.resize",
+			methodName: "resize",
+			returnType: "Array",
+			paramNames: []string{"new_size"},
+			paramTypes: []string{"Int"},
+		},
+	}
+
+	for _, m := range methods {
+		_ = sa.global.Add(m.fullName, &SymbolEntry{
+			Name: m.methodName,
+			Type: m.returnType,
+			Method: &MethodSignature{
+				ParamNames: m.paramNames,
+				ParamTypes: m.paramTypes,
+				ReturnType: m.returnType,
+			},
+		})
+	}
+}
+

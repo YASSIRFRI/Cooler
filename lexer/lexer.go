@@ -187,8 +187,6 @@ var reserved = map[string]string{
     "self":     "SELF",
     "isvoid":   "ISVOID",
     "array":    "ARRAY",
-    // We do NOT keep "import" in here, because after expansion,
-    // the parser does not see import statements at all.
 }
 
 // NewLexer takes the fully expanded source code (where all imports have been
@@ -355,7 +353,6 @@ func (lx *Lexer) nextToken() *Token {
         lx.pos++
         return &Token{Type: "RBRACKET", Value: "]", Line: lx.line}
     default:
-        // Illegal/unknown character: skip, log error, get next
         errChar := string(ch)
         fmt.Fprintf(os.Stderr, "Illegal character '%s' at line %d\n", errChar, lx.line)
         lx.pos++
@@ -363,7 +360,6 @@ func (lx *Lexer) nextToken() *Token {
     }
 }
 
-// skipWhitespace moves past spaces, tabs, carriage returns, and newlines
 func (lx *Lexer) skipWhitespace() {
     for lx.pos < len(lx.input) {
         ch := lx.input[lx.pos]
@@ -378,7 +374,6 @@ func (lx *Lexer) skipWhitespace() {
     }
 }
 
-// skipSingleLineComment moves past everything until the next newline.
 func (lx *Lexer) skipSingleLineComment() {
     for lx.pos < len(lx.input) && lx.input[lx.pos] != '\n' {
         lx.pos++
