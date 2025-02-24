@@ -8,7 +8,9 @@ import (
 )
 
 // --------------------------------------------------------
-//          SYMBOL TABLE / ENTRIES
+//
+//	SYMBOL TABLE / ENTRIES
+//
 // --------------------------------------------------------
 type SymbolTable struct {
 	parent  *SymbolTable
@@ -16,9 +18,10 @@ type SymbolTable struct {
 }
 
 type SymbolEntry struct {
-	Name   string
-	Type   string
-	Method *MethodSignature
+	Name     string
+	Type     string
+	Method   *MethodSignature
+	ElemType string // Add this field for arrays
 }
 
 type MethodSignature struct {
@@ -53,7 +56,9 @@ func (st *SymbolTable) Lookup(name string) (*SymbolEntry, bool) {
 }
 
 // --------------------------------------------------------
-//          SEMANTIC ANALYZER
+//
+//	SEMANTIC ANALYZER
+//
 // --------------------------------------------------------
 type SemanticAnalyzer struct {
 	global   *SymbolTable
@@ -70,7 +75,7 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 
 	// 1) Create builtin classes.
 	// In COOL the basic classes all exist in the system.
-	builtins := []string{"Object", "Int", "Bool", "String", "IO","Array"}
+	builtins := []string{"Object", "Int", "Bool", "String", "IO", "Array"}
 	for _, b := range builtins {
 		_ = sa.global.Add(b, &SymbolEntry{
 			Name: b,
@@ -88,12 +93,13 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 	sa.addStringMethods()
 	sa.addArrayMethods()
 
-
 	return sa
 }
 
 // --------------------------------------------------------
-//          OBJECT METHODS INTEGRATION
+//
+//	OBJECT METHODS INTEGRATION
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) addObjectMethods() {
 	methods := []struct {
@@ -140,7 +146,9 @@ func (sa *SemanticAnalyzer) addObjectMethods() {
 }
 
 // --------------------------------------------------------
-//          IO METHODS INTEGRATION
+//
+//	IO METHODS INTEGRATION
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) addIOMethods() {
 	methods := []struct {
@@ -194,7 +202,9 @@ func (sa *SemanticAnalyzer) addIOMethods() {
 }
 
 // --------------------------------------------------------
-//          STRING METHODS INTEGRATION
+//
+//	STRING METHODS INTEGRATION
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) addStringMethods() {
 	// Built-in: length() : Int, concat(String) : String, substr(Int, Int) : String
@@ -262,11 +272,13 @@ func (sa *SemanticAnalyzer) Analyze(program *parser.Program) {
 }
 
 // --------------------------------------------------------
-//          1) BUILD CLASS SYMBOLS
+//  1. BUILD CLASS SYMBOLS
+//
 // --------------------------------------------------------
 // To avoid ordering issues we do two passes:
-//   (a) register all classes (by name) in the global table,
-//   (b) then set up inheritance (and check that parent names exist).
+//
+//	(a) register all classes (by name) in the global table,
+//	(b) then set up inheritance (and check that parent names exist).
 func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 	// First pass: register all classes.
 	for _, classNode := range prog.Classes {
@@ -315,7 +327,8 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 }
 
 // --------------------------------------------------------
-//          2) BUILD FEATURES
+//  2. BUILD FEATURES
+//
 // --------------------------------------------------------
 // Register each class’s attributes and methods in a first pass so that
 // later method calls (even from subclasses) can find inherited methods.
@@ -423,7 +436,8 @@ func (sa *SemanticAnalyzer) registerMethod(className string, method *parser.Meth
 }
 
 // --------------------------------------------------------
-//          3) TYPE CHECK
+//  3. TYPE CHECK
+//
 // --------------------------------------------------------
 // When type–checking a class we build a symbol table that not only
 // contains the class’s own features but also those inherited from its ancestors.
@@ -521,7 +535,9 @@ func (sa *SemanticAnalyzer) typeCheckMethod(m *parser.Method, classScope *Symbol
 }
 
 // --------------------------------------------------------
-//          getExprType
+//
+//	getExprType
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, currentClass string) string {
 	switch e := expr.(type) {
@@ -607,6 +623,16 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 						"unknown type %q for %q", attr.Type, attr.Ident)
 				}
 			}
+			entry := &SymbolEntry{
+				Name: attr.Ident,
+				Type: attr.Type,
+			}
+			// I
+			if attr.Type == "Array" && attr.Init != nil {
+				if arrExpr, ok := attr.Init.(*parser.ArrayExpression); ok {
+					entry.ElemType = arrExpr.ElemType
+				}
+			}
 			if attr.Init != nil {
 				initType := sa.getExprType(attr.Init, letScope, currentClass)
 				expandedInit := initType
@@ -622,11 +648,30 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 						"init type %q does not conform to declared type %q",
 						initType, attr.Type)
 				}
+				var elemType string
+				if arrayExpr, ok := attr.Init.(*parser.ArrayExpression); ok {
+					elemType = arrayExpr.ElemType
+					if _, ok := sa.global.Lookup(elemType); !ok {
+						sa.verbosef("getExprType(let)", "unknown element type %q for array", elemType)
+						elemType = "" // Invalidate if unknown
+					}
+				}
+				entry := &SymbolEntry{
+					Name: attr.Ident,
+					Type: declared,
+				}
+				if elemType != "" {
+					entry.ElemType = elemType
+				}
+				if err := letScope.Add(attr.Ident, entry); err != nil {
+					sa.verbosef("getExprType(let)", "failed to add variable %q: %v", attr.Ident, err)
+				}
+			} else {
+				_ = letScope.Add(attr.Ident, &SymbolEntry{
+					Name: attr.Ident,
+					Type: attr.Type,
+				})
 			}
-			_ = letScope.Add(attr.Ident, &SymbolEntry{
-				Name: attr.Ident,
-				Type: attr.Type,
-			})
 		}
 		return sa.getExprType(e.Body, letScope, currentClass)
 
@@ -697,10 +742,10 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 			return "Object"
 		}
 
-
 	case *parser.ArrayExpression:
 		if _, ok := sa.global.Lookup(e.ElemType); !ok {
 			sa.verbosef("getExprType(ArrayExpression)", "undefined element type %q", e.ElemType)
+			return "Array"
 		}
 		return "Array"
 
@@ -764,8 +809,24 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 			}
 		}
 
-		// 5) Determine the return type.
 		if entry.Method.ReturnType == "SELF_TYPE" {
+			return objType
+		}
+
+		if entry.Method.ReturnType == "ELEM_TYPE" {
+			var elemType string
+			if objIdent, ok := e.Object.(*parser.Ident); ok {
+				objEntry, found := scope.Lookup(objIdent.Name)
+				if found {
+					elemType = objEntry.ElemType
+				}
+			}
+			if elemType == "" {
+				sa.verbosef("getExprType(methodCall)", "ELEM_TYPE used but element type is unknown")
+				return "Object"
+			}
+			return elemType
+		} else if entry.Method.ReturnType == "SELF_TYPE" {
 			return objType
 		}
 		return entry.Method.ReturnType
@@ -813,7 +874,9 @@ func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, cu
 }
 
 // --------------------------------------------------------
-//    lookupMethod: search class or parents for the method
+//
+//	lookupMethod: search class or parents for the method
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) lookupMethod(className, methodName string) *SymbolEntry {
 	current := className
@@ -832,7 +895,9 @@ func (sa *SemanticAnalyzer) lookupMethod(className, methodName string) *SymbolEn
 }
 
 // --------------------------------------------------------
-//          isTypeConformant
+//
+//	isTypeConformant
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) isTypeConformant(actual, expected string) bool {
 	// Both actual and expected should be expanded (i.e. SELF_TYPE replaced)
@@ -854,7 +919,9 @@ func (sa *SemanticAnalyzer) isTypeConformant(actual, expected string) bool {
 }
 
 // --------------------------------------------------------
-//          join: compute least upper bound of two types
+//
+//	join: compute least upper bound of two types
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) join(type1, type2 string) string {
 	// If either is SELF_TYPE, assume it’s already been expanded by callers.
@@ -890,7 +957,9 @@ func (sa *SemanticAnalyzer) join(type1, type2 string) string {
 }
 
 // --------------------------------------------------------
-//   buildInheritanceChain: return the chain from Object to the given class.
+//
+//	buildInheritanceChain: return the chain from Object to the given class.
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) getInheritanceChain(className string) []string {
 	chain := []string{}
@@ -913,8 +982,10 @@ func (sa *SemanticAnalyzer) getInheritanceChain(className string) []string {
 }
 
 // --------------------------------------------------------
-//   buildInheritedAttributes: build a symbol table containing all attributes
-//   declared in ancestor classes (but not the current class).
+//
+//	buildInheritedAttributes: build a symbol table containing all attributes
+//	declared in ancestor classes (but not the current class).
+//
 // --------------------------------------------------------
 func (sa *SemanticAnalyzer) buildInheritedAttributes(className string, classesByName map[string]*parser.Class) *SymbolTable {
 	env := NewSymbolTable(nil)
@@ -939,16 +1010,8 @@ func (sa *SemanticAnalyzer) buildInheritedAttributes(className string, classesBy
 	return env
 }
 
-
-
 func (sa *SemanticAnalyzer) addArrayMethods() {
 	// Define built-in Array methods.
-	// For simplicity, we assume:
-	//   - get(index: Int): Int       -- returns the element (here we assume Int for testing)
-	//   - set(index: Int, value: Object): Array
-	//   - length(): Int               -- boxed length
-	//   - raw_length(): Int           -- raw length (we use Int to simplify)
-	//   - resize(new_size: Int): Array
 	methods := []struct {
 		fullName   string
 		methodName string
@@ -959,16 +1022,16 @@ func (sa *SemanticAnalyzer) addArrayMethods() {
 		{
 			fullName:   "Array.get",
 			methodName: "get",
-			returnType: "Int", 
+			returnType: "ELEM_TYPE", // Special marker that will be replaced during type checking
 			paramNames: []string{"index"},
 			paramTypes: []string{"Int"},
 		},
 		{
 			fullName:   "Array.set",
 			methodName: "set",
-			returnType: "Array",
+			returnType: "Array", // Return type is typically the array itself for chaining
 			paramNames: []string{"index", "value"},
-			paramTypes: []string{"Int", "Object"},
+			paramTypes: []string{"Int", "Object"}, // Accept "Object" as the value type
 		},
 		{
 			fullName:   "Array.length",
@@ -1005,4 +1068,3 @@ func (sa *SemanticAnalyzer) addArrayMethods() {
 		})
 	}
 }
-

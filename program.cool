@@ -1,7 +1,7 @@
 class Main inherits IO{
-    x: Int;
+    x: String;
   main(): Object {
-    let a : Array <-  Array[Int] in {
+    let a : Array <-  Array[String] in {
         if isvoid a then {
             out_string("a is null");
         }else{
@@ -10,17 +10,20 @@ class Main inherits IO{
       out_string("Test 1\n");
       a.resize(3);      
       out_string("Test 2\n");
-      a.set(0, 42);    
-      a.set(1, 100);  
-      a.set(2, 200); 
+      a.set(0, "Hello");    
+      a.set(1, "Test3");  
+      a.set(2, "Test"); 
       let b : Int in {
         x <- a.get(1);
-        x <- 1;
-        out_int(a.get(0)); 
+        out_string(a.get(0)); 
         out_string("\n");
-        out_int(a.length()); 
+        out_string(a.get(1)); 
         out_string("\n");
-        out_int(a.size());
+        ----out_int(a.get(2)); 
+        out_string("\n");
+        --out_int(a.length()); 
+        --out_string("\n");
+        --out_int(a.size());
       }
     }
   };
