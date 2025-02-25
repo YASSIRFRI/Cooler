@@ -46,7 +46,7 @@ func main() {
 	}
 
 	// Create (or overwrite) the output DOT file for AST.
-	dotFile, err := os.Create("ast_for_input.dot")
+	dotFile, err := os.Create("ast.dot")
 	if err != nil {
 		fmt.Println("Error creating ast.dot file:", err)
 		return

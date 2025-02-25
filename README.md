@@ -243,7 +243,7 @@ class Main inherits IO {
 
 ```
 <p align="center">
-  <img src="/assets/seg.svg" alt="AST Visualization" width="600"/>
+  <img src="/assets/complex_visu.png" alt="AST Visualization" width="600"/>
 </p>
 
 2. **Inheritance Graph Example:**
@@ -262,34 +262,15 @@ class Cat inherits Animal {
 };
 ```
 <p align="center">
-  <img src="/assets/inheritance-graph.png" alt="Inheritance Graph" width="600"/>
+  <img src="/assets/example2.png" alt="Inheritance Graph" width="600"/>
 </p>
 
-3. **Method Dispatch Visualization:**
-```cool
-// Example 3: Method dispatch and virtual table layout
-class Shape {
-    area(): Int { 0 };
-    perimeter(): Int { 0 };
-};
 
-class Rectangle inherits Shape {
-    width: Int <- 0;
-    height: Int <- 0;
-    area(): Int { width * height };
-    perimeter(): Int { 2 * (width + height) };
-};
-```
-<p align="center">
-  <img src="/assets/vtable-visualization.png" alt="VTable Layout" width="600"/>
-</p>
 
 To generate these visualizations:
 ```bash
-# Launch the visualization tool
-go run visualize.go --input=your_cool_file.cool
-
-# Open http://localhost:8080 in your browser to view the interactive diagrams
+go run visualize_ast_tree.go 
+# Copy the  content of the generated file (ast.dot) to : https://dreampuf.github.io/GraphvizOnline/
 ```
 
 ### Code Generation & Runtime ⚙️
@@ -330,10 +311,10 @@ cd cooler
 ### Running the Compiler
 Compile and run the compiler with your COOL source file:
 ```bash
-go run main.go <source_file.cool>
+go build -o coolc.exe main.go
+coolc -o output program.cool
 ```
 
-### Visualizing the Compiler’s Output
 Launch the visualization tool to inspect the AST and class hierarchy:
 ```bash
 go run visualize.go

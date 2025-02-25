@@ -161,14 +161,14 @@ func (sa *SemanticAnalyzer) addIOMethods() {
 		{
 			fullName:   "IO.out_string",
 			methodName: "out_string",
-			returnType: "IO",
+			returnType: "SELF_TYPE",
 			paramNames: []string{"x"},
 			paramTypes: []string{"String"},
 		},
 		{
 			fullName:   "IO.out_int",
 			methodName: "out_int",
-			returnType: "IO",
+			returnType: "SELF_TYPE",
 			paramNames: []string{"x"},
 			paramTypes: []string{"Int"},
 		},

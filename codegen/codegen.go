@@ -1295,22 +1295,17 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                 }
             }
             if staticType == "Array" {
-                fmt.Println("Array method: ", n.Method.Ident)
                 switch n.Method.Ident {
                 case "get":
                     arrayGetFn := findFuncByName(cg.module, "Array_get")
                     if arrayGetFn == nil {
-                        fmt.Println("Array_get not found")
                         return constant.NewNull(types.NewPointer(types.I8))
                     }
-                    fmt.Println("Array_get found")
                     indexVal := cg.genExpr(n.Method.Params[0])
                     unboxedIndex := cg.unboxInt(indexVal)
                     index64 := cg.currentBlock.NewSExt(unboxedIndex, types.I64)
                     args := []value.Value{receiver, index64}
-                    // Call Array_get to retrieve the element
                     elemPtr := cg.currentBlock.NewCall(arrayGetFn, args...)
-                    // Cast the i8* result to IntStruct*
                     intPtr := cg.currentBlock.NewBitCast(elemPtr, cg.getClassPtrType("Int"))
                     return intPtr
                 case "set":
