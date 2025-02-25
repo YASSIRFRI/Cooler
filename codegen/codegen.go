@@ -1688,7 +1688,6 @@ func (cg *CodeGenerator) defineIOBuiltins() {
     block.NewStore(ptr, charFieldPtr)
     block.NewRet(newStringObj)
 
-    // IO_in_int
     inIntFn := cg.module.NewFunc(
         "IO_in_int",
         cg.getClassPtrType("Int"),

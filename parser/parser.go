@@ -661,6 +661,33 @@ func (p *Parser) parseTypeAction() (*TypeAction, error) {
     }, nil
 }
 
+
+
+func (p *Parser) parseType() (string, error) {
+    typeTok := p.currentToken()
+    if typeTok == nil || typeTok.Type != "TYPE" {
+        return "", p.errorf("expected TYPE, got %v", typeTok)
+    }
+    typeName := typeTok.Value.(string)
+    p.nextToken()
+
+    // Handle Array[Int]
+    if p.currentToken() != nil && p.currentToken().Type == "LBRACKET" {
+        p.nextToken() // consume [
+        elemType, err := p.parseType()
+        if err != nil {
+            return "", err
+        }
+        if p.currentToken() == nil || p.currentToken().Type != "RBRACKET" {
+            return "", p.errorf("expected ] after array element type, got %v", p.currentToken())
+        }
+        p.nextToken() // consume ]
+        typeName = typeName + "[" + elemType + "]"
+    }
+
+    return typeName, nil
+}
+
 // parseAttrDef is used for let-bindings or class attributes
 func (p *Parser) parseAttrDef() (Node, error) {
     tok := p.currentToken()
@@ -970,18 +997,16 @@ func (p *Parser) parseMethodDef(methodName string) (Node, error) {
 }
 
 func (p *Parser) parseAttributeDef(attrName string) (Node, error) {
-    // current token is "COLON", consume it
+    // Consume COLON
     p.nextToken()
 
-    // expect TYPE
-    if p.currentToken() == nil || p.currentToken().Type != "TYPE" {
-        return nil, p.errorf("expected TYPE after ':' in attribute definition %s, got %v", attrName, p.currentToken())
+    // CHANGED: Use parseType() to handle Array[Int]
+    attrType, err := p.parseType()
+    if err != nil {
+        return nil, err
     }
-    attrType := p.currentToken().Value.(string)
-    p.nextToken() // consume TYPE
 
     var initExpr Node
-    // optional '<-' expr
     if p.currentToken() != nil && p.currentToken().Type == "ASSIGN" {
         p.nextToken() // consume '<-'
         e, err := p.parseExpression(_LOWEST)
@@ -992,7 +1017,7 @@ func (p *Parser) parseAttributeDef(attrName string) (Node, error) {
     }
     return &Attribute{
         Ident: attrName,
-        Type:  attrType,
+        Type:  attrType,  // Now supports Array[Int]
         Init:  initExpr,
     }, nil
 }
@@ -1022,9 +1047,7 @@ func (p *Parser) parseFormals() ([]*Formal, error) {
     return formals, nil
 }
 
-// parseFormal expects "id : TYPE"
 func (p *Parser) parseFormal() (*Formal, error) {
-    // expect ID
     idTok := p.currentToken()
     if idTok == nil || idTok.Type != "ID" {
         return nil, p.errorf("expected formal parameter name (ID), got %v", idTok)
@@ -1032,22 +1055,17 @@ func (p *Parser) parseFormal() (*Formal, error) {
     name := idTok.Value.(string)
     p.nextToken() // consume ID
 
-    // expect ':'
     if p.currentToken() == nil || p.currentToken().Type != "COLON" {
         return nil, p.errorf("expected ':' after formal parameter name %s, got %v", name, p.currentToken())
     }
     p.nextToken() // consume ':'
-
-    // expect TYPE
-    if p.currentToken() == nil || p.currentToken().Type != "TYPE" {
-        return nil, p.errorf("expected TYPE after ':' in formal for %s, got %v", name, p.currentToken())
+    ty, err := p.parseType()
+    if err != nil {
+        return nil, err
     }
-    ty := p.currentToken().Value.(string)
-    p.nextToken() // consume TYPE
 
-    return &Formal{Ident: name, Type: ty}, nil
+    return &Formal{Ident: name, Type: ty}, nil  // Now handles nested types
 }
-
 // ----------------------------------------------------
 //                 TOP-LEVEL PARSER
 // ----------------------------------------------------

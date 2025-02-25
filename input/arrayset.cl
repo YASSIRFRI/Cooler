@@ -1,0 +1,113 @@
+class ArraySet inherits IO {
+    arr : Array[Int];
+    size : Int;
+    capacity : Int;
+
+    init_set() : ArraySet {
+        {
+            capacity <- 10;
+            size <- 0;
+            arr <- Array[Int];
+            arr.resize(capacity);
+            self;
+        }
+    };
+
+    contains(val : Int) : Bool {
+        let i : Int <- 0 in {
+            let found : Bool <- false in {
+                while i < size loop
+                    if arr.get(i) = val then {
+                        found <- true;
+                        i <- size;  -- exit loop
+                    } else {
+                        i <- i + 1;
+                    } fi
+                pool;
+                found
+            }
+        }
+    };
+
+    insert(val : Int) : ArraySet {
+        {
+            if not contains(val) then {
+                if size = capacity then {
+                    capacity <- capacity * 2;
+                    arr.resize(capacity);
+                } else{}
+                fi;
+                arr.set(size, val);
+                size <- size + 1;
+            }else{
+
+            }fi;
+            self;
+        }
+    };
+
+    delete(val : Int) : ArraySet {
+        {
+            let i : Int <- 0 in {
+                while i < size loop
+                    if arr.get(i) = val then {
+                        -- Shift elements left to cover the removed element
+                        let j : Int <- i in {
+                            while j < size - 1 loop {
+                                arr.set(j, arr.get(j + 1));
+                                j <- j + 1;
+                            } pool;
+                        };
+                        size <- size - 1;
+                        i <- size;  -- exit loop after deletion
+                    } else {
+                        i <- i + 1;
+                    } fi
+                pool;
+            };
+            self;
+        }
+    };
+
+    print_set() : ArraySet {
+        {
+            let i : Int <- 0 in {
+                while i < size loop {
+                    out_int(arr.get(i));
+                    out_string(" ");
+                    i <- i + 1;
+                } pool;
+                out_string("\n");
+            };
+            self;
+        }
+    };
+};
+
+class MainArray inherits IO {
+    main() : Object {
+        let s : ArraySet <- new ArraySet in {
+            s.init_set();
+
+            s.insert(10);
+            s.insert(20);
+            s.insert(30);
+            s.insert(20);  -- duplicate insert (ignored)
+
+            out_string("Current set contents (Array):\n");
+            s.print_set();
+
+            out_string("Deleting 20 from set...\n");
+            s.delete(20);
+            s.print_set();
+
+            out_string("Contains 20? ");
+            if s.contains(20) then
+                out_string("Yes\n")
+            else
+                out_string("No\n")
+            fi;
+            self;
+        }
+    };
+};
