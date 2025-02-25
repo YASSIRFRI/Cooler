@@ -1,0 +1,107 @@
+Program
+  Class: List inherits IO
+    Attribute: item : Int
+    Attribute: next : List
+    Method: ite : List
+      Formals:
+        Formal: i : Int
+        Formal: n : List
+      Body:
+        Block:
+          Assignment:
+            Ident:
+              Ident: item
+            Expr:
+              Ident: i
+          Assignment:
+            Ident:
+              Ident: next
+            Expr:
+              Ident: n
+          Self
+    Method: print : Object
+      Body:
+        Block:
+          FunctionCall: out_int
+            Params:
+              Ident: item
+          FunctionCall: out_int
+            Params:
+              Ident: item
+          If Expression:
+            Condition:
+              UnaryOperation: isvoid
+                Right:
+                  Ident: next
+            True Branch:
+              Self
+            False Branch:
+              MethodCall:
+                Object:
+                  Ident: next
+                Method:
+                  FunctionCall: print
+  Class: Main inherits IO
+    Method: main : Object
+      Body:
+        Let Expression:
+          Assignments:
+            Attribute: first : List
+              Init:
+                New: List
+            Attribute: second : List
+              Init:
+                New: List
+            Attribute: third : List
+              Init:
+                New: List
+          Body:
+            Block:
+              MethodCall:
+                Object:
+                  Ident: first
+                Method:
+                  FunctionCall: ite
+                    Params:
+                      IntConst: 1
+                      Ident: second
+              MethodCall:
+                Object:
+                  Ident: second
+                Method:
+                  FunctionCall: ite
+                    Params:
+                      IntConst: 2
+                      Ident: third
+              MethodCall:
+                Object:
+                  Ident: first
+                Method:
+                  FunctionCall: print
+              Let Expression:
+                Assignments:
+                  Attribute: count : Int
+                    Init:
+                      IntConst: 0
+                Body:
+                  While Loop:
+                    Condition:
+                      BinaryOperation: <
+                        Left:
+                          Ident: count
+                        Right:
+                          IntConst: 3
+                    Body:
+                      Block:
+                        FunctionCall: out_string
+                          Params:
+                            StringConst: " "
+                        Assignment:
+                          Ident:
+                            Ident: count
+                          Expr:
+                            BinaryOperation: +
+                              Left:
+                                Ident: count
+                              Right:
+                                IntConst: 1

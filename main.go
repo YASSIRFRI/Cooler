@@ -48,11 +48,9 @@ func main() {
     }
 
     if ms.HasErrors() {
-        // We have recorded import errors
         for _, e := range ms.Errors() {
             fmt.Printf("Import error: %v\n", e)
         }
-        // handle or exit
         return
     }
 
@@ -61,14 +59,14 @@ func main() {
 	for tok := lx.NextToken(); tok != nil; tok = lx.NextToken() {
 		tokens = append(tokens, tok)
 	}
-	fmt.Printf("Lexing completed: %d tokens generated.\n", len(tokens))
+	//fmt.Printf("Lexing completed: %d tokens generated.\n", len(tokens))
 
 	p := parser.NewParser(tokens)
 	prog, err := p.ParseProgram()
 	if err != nil {
 		log.Fatalf("Parsing error: %v", err)
 	}
-	fmt.Println("Parsing completed successfully.")
+	//fmt.Println("Parsing completed successfully.")
 
 	analyzer := semant.NewSemanticAnalyzer()
 	analyzer.Analyze(prog)
@@ -79,11 +77,11 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	fmt.Println("Semantic analysis passed.")
+	//fmt.Println("Semantic analysis passed.")
 
 	llvmModule := codegen.CodegenProgram(prog)
 	//fmt.Println(llvmModule)
-	fmt.Println("IR Code generation completed.")
+	//fmt.Println("IR Code generation completed.")
 	fmt.Println("\033[1;34m========================================\033[0m")
 	llvmIR := llvmModule.String()
 	baseName := strings.TrimSuffix(sourceFile, ".cool")
@@ -106,7 +104,7 @@ func main() {
 	clangCmd := exec.Command("clang", llFile, "-o", exeName)
 	clangCmd.Stdout = os.Stdout
 	clangCmd.Stderr = os.Stderr
-	fmt.Printf("Invoking clang to produce executable %q...\n", exeName)
+	//fmt.Printf("Invoking clang to produce executable %q...\n", exeName)
 	if err := clangCmd.Run(); err != nil {
 		log.Fatalf("Clang failed: %v", err)
 	}

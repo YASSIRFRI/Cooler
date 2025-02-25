@@ -372,7 +372,6 @@ func (sa *SemanticAnalyzer) registerAttribute(className string, attr *parser.Att
 }
 
 func (sa *SemanticAnalyzer) registerMethod(className string, method *parser.Method, scope *SymbolTable) {
-	// Accept SELF_TYPE as return type.
 	if method.Type != "SELF_TYPE" {
 		if _, ok := sa.global.Lookup(method.Type); !ok {
 			sa.verbosef("registerMethod",

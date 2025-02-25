@@ -85,10 +85,6 @@ class LinkedList inherits IO {
     };
 };
 
--- Very dumb Set implementation:
--- 1) Internally uses a LinkedList (unoptimized).
--- 2) On insert, we check if the value is already present using 'search'.
--- 3) If it's not present, we insert it. Otherwise, we do nothing.
 class DumbSet inherits IO {
     l : LinkedList;
 
