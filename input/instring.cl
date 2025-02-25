@@ -6,7 +6,7 @@ class Main inherits IO{
             out_string("\n");
             let n : Int <- in_int() in{
                 out_string("You entered the integer: ");
-                out_int(n-1);
+                out_int(n);
                 out_string("\n");
             }
         }

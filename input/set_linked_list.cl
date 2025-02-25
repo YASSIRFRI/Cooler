@@ -85,10 +85,10 @@ class LinkedList inherits IO {
     };
 };
 
-class DumbSet inherits IO {
+class Set inherits IO {
     l : LinkedList;
 
-    init_set() : DumbSet {
+    init_set() : Set {
         {
             l <- new LinkedList;
             l.init_list();
@@ -96,7 +96,7 @@ class DumbSet inherits IO {
         }
     };
 
-    insert(val : Int) : DumbSet {
+    insert(val : Int) : Set {
         {
             if not l.search(val) then
                 l.insert(val)
@@ -110,7 +110,7 @@ class DumbSet inherits IO {
         l.search(val)
     };
 
-    print_set() : DumbSet {
+    print_set() : Set {
         {
             l.print();
             self;
@@ -120,7 +120,7 @@ class DumbSet inherits IO {
 
 class Main inherits IO {
     main() : Object {
-        let s : DumbSet <- new DumbSet in {
+        let s : Set <- new Set in {
             s.init_set();
 
             -- Insert some values.

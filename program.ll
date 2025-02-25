@@ -4,7 +4,7 @@
 %StringStruct = type { i8*, i8* }
 %IOStruct = type { i8* }
 %ArrayStruct = type { i8*, i64, i8* }
-%Main_struct = type { i8*, %StringStruct* }
+%Main_struct = type { i8* }
 
 @fmt_str_0 = constant [3 x i8] c"%s\00"
 @fmt_int_1 = constant [3 x i8] c"%d\00"
@@ -19,30 +19,18 @@
 @vtable_IO = global [7 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_copy to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IOStruct* (%IOStruct*, %StringStruct*)* @IO_out_string to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IOStruct* (%IOStruct*, %IntStruct*)* @IO_out_int to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%IOStruct*)* @IO_in_string to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%IOStruct*)* @IO_in_int to %ObjectStruct* (%ObjectStruct*)*)]
 @vtable_Array = global [7 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_copy to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%ArrayStruct*)* @Array_length to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (i8* (%ArrayStruct*, i64)* @Array_get to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (void (%ArrayStruct*, i64, i8*)* @Array_set to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ArrayStruct* (%ArrayStruct*, i64)* @Array_resize to %ObjectStruct* (%ObjectStruct*)*)]
 @vtable_Main = constant [1 x i8*] [i8* bitcast (%ObjectStruct* (%Main_struct*)* @Main_main to i8*)]
-@str_2 = global [10 x i8] c"a is null\00"
-@str_obj_3 = constant { i8* } { [10 x i8]* getelementptr inbounds ([10 x i8], [10 x i8]* @str_2) }
-@str_4 = global [15 x i8] c"a is not null\0A\00"
-@str_obj_5 = constant { i8* } { [15 x i8]* getelementptr inbounds ([15 x i8], [15 x i8]* @str_4) }
-@str_6 = global [8 x i8] c"Test 1\0A\00"
-@str_obj_7 = constant { i8* } { [8 x i8]* getelementptr inbounds ([8 x i8], [8 x i8]* @str_6) }
-@str_8 = global [8 x i8] c"Test 2\0A\00"
-@str_obj_9 = constant { i8* } { [8 x i8]* getelementptr inbounds ([8 x i8], [8 x i8]* @str_8) }
-@str_10 = global [9 x i8] c"Cool is \00"
-@str_obj_11 = constant { i8* } { [9 x i8]* getelementptr inbounds ([9 x i8], [9 x i8]* @str_10) }
-@str_12 = global [9 x i8] c"Cool is \00"
-@str_obj_13 = constant { i8* } { [9 x i8]* getelementptr inbounds ([9 x i8], [9 x i8]* @str_12) }
-@str_14 = global [5 x i8] c"Even\00"
-@str_obj_15 = constant { i8* } { [5 x i8]* getelementptr inbounds ([5 x i8], [5 x i8]* @str_14) }
-@str_16 = global [5 x i8] c"Even\00"
-@str_obj_17 = constant { i8* } { [5 x i8]* getelementptr inbounds ([5 x i8], [5 x i8]* @str_16) }
-@str_18 = global [7 x i8] c"Cooler\00"
-@str_obj_19 = constant { i8* } { [7 x i8]* getelementptr inbounds ([7 x i8], [7 x i8]* @str_18) }
-@str_20 = global [7 x i8] c"Cooler\00"
-@str_obj_21 = constant { i8* } { [7 x i8]* getelementptr inbounds ([7 x i8], [7 x i8]* @str_20) }
-@str_22 = global [2 x i8] c"\0A\00"
-@str_obj_23 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_22) }
-@str_24 = global [2 x i8] c"\0A\00"
-@str_obj_25 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_24) }
+@str_2 = global [17 x i8] c"Enter the size: \00"
+@str_obj_3 = constant { i8* } { [17 x i8]* getelementptr inbounds ([17 x i8], [17 x i8]* @str_2) }
+@str_4 = global [24 x i8] c"Enter number for index \00"
+@str_obj_5 = constant { i8* } { [24 x i8]* getelementptr inbounds ([24 x i8], [24 x i8]* @str_4) }
+@str_6 = global [3 x i8] c": \00"
+@str_obj_7 = constant { i8* } { [3 x i8]* getelementptr inbounds ([3 x i8], [3 x i8]* @str_6) }
+@str_8 = global [15 x i8] c"Sorted array: \00"
+@str_obj_9 = constant { i8* } { [15 x i8]* getelementptr inbounds ([15 x i8], [15 x i8]* @str_8) }
+@str_10 = global [2 x i8] c" \00"
+@str_obj_11 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_10) }
+@str_12 = global [2 x i8] c"\0A\00"
+@str_obj_13 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_12) }
 
 declare i8* @malloc(i64 %size)
 
@@ -280,7 +268,7 @@ entry:
 
 define i32 @main() {
 entry:
-	%0 = call i8* @malloc(i64 16)
+	%0 = call i8* @malloc(i64 8)
 	%1 = bitcast i8* %0 to %Main_struct*
 	%2 = bitcast [1 x i8*]* @vtable_Main to i8*
 	%3 = getelementptr %Main_struct, %Main_struct* %1, i32 0, i32 0
@@ -297,196 +285,441 @@ entry:
 	%2 = bitcast %Main_struct* %1 to %Main_struct*
 	%3 = alloca %Main_struct*
 	store %Main_struct* %2, %Main_struct** %3
-	%4 = alloca %ArrayStruct*
-	%5 = call i8* @malloc(i64 24)
-	%6 = bitcast i8* %5 to %ArrayStruct*
-	%7 = mul i64 8, 8
-	%8 = call i8* @malloc(i64 %7)
-	%9 = getelementptr %ArrayStruct, %ArrayStruct* %6, i32 0, i32 1
-	store i64 0, i64* %9
-	%10 = getelementptr %ArrayStruct, %ArrayStruct* %6, i32 0, i32 2
-	store i8* %8, i8** %10
-	%11 = bitcast [7 x %ObjectStruct* (%ObjectStruct*)*]* @vtable_Array to i8*
-	%12 = getelementptr %ArrayStruct, %ArrayStruct* %6, i32 0, i32 0
-	store i8* %11, i8** %12
-	store %ArrayStruct* %6, %ArrayStruct** %4
-	%13 = load %ArrayStruct*, %ArrayStruct** %4
-	%14 = icmp eq %ArrayStruct* %13, null
-	%15 = call i8* @malloc(i64 16)
-	%16 = bitcast i8* %15 to %BoolStruct*
-	%17 = getelementptr %BoolStruct, %BoolStruct* %16, i32 0, i32 1
-	store i1 %14, i1* %17
-	%18 = getelementptr %BoolStruct, %BoolStruct* %16, i32 0, i32 1
-	%19 = load i1, i1* %18
-	%20 = icmp ne i1 %19, false
-	br i1 %20, label %if_then_0, label %if_else_1
+	%4 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_3 to %StringStruct*), i32 0, i32 0
+	%5 = load i8*, i8** %4
+	%6 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%7 = call i32 (i8*, ...) @printf(i8* %6, i8* %5)
+	%8 = load %Main_struct*, %Main_struct** %3
+	%9 = alloca %IntStruct*
+	%10 = alloca i32
+	%11 = getelementptr [3 x i8], [3 x i8]* @fmt_int_in_3, i32 0, i32 0
+	%12 = call i32 (i8*, ...) @scanf(i8* %11, i32* %10)
+	%13 = load i32, i32* %10
+	%14 = call i8* @malloc(i64 16)
+	%15 = bitcast i8* %14 to %IntStruct*
+	%16 = getelementptr %IntStruct, %IntStruct* %15, i32 0, i32 1
+	store i32 %13, i32* %16
+	store %IntStruct* %15, %IntStruct** %9
+	%17 = alloca %ArrayStruct*
+	%18 = call i8* @malloc(i64 24)
+	%19 = bitcast i8* %18 to %ArrayStruct*
+	%20 = mul i64 8, 8
+	%21 = call i8* @malloc(i64 %20)
+	%22 = getelementptr %ArrayStruct, %ArrayStruct* %19, i32 0, i32 1
+	store i64 0, i64* %22
+	%23 = getelementptr %ArrayStruct, %ArrayStruct* %19, i32 0, i32 2
+	store i8* %21, i8** %23
+	%24 = bitcast [7 x %ObjectStruct* (%ObjectStruct*)*]* @vtable_Array to i8*
+	%25 = getelementptr %ArrayStruct, %ArrayStruct* %19, i32 0, i32 0
+	store i8* %24, i8** %25
+	store %ArrayStruct* %19, %ArrayStruct** %17
+	%26 = load %ArrayStruct*, %ArrayStruct** %17
+	%27 = bitcast %ArrayStruct* %26 to %ObjectStruct*
+	%28 = load %IntStruct*, %IntStruct** %9
+	%29 = load %IntStruct*, %IntStruct** %9
+	%30 = getelementptr %IntStruct, %IntStruct* %29, i32 0, i32 1
+	%31 = load i32, i32* %30
+	%32 = sext i32 %31 to i64
+	%33 = call %ArrayStruct* @Array_resize(%ObjectStruct* %27, i64 %32)
+	%34 = alloca %IntStruct*
+	%35 = call i8* @malloc(i64 16)
+	%36 = bitcast i8* %35 to %IntStruct*
+	%37 = getelementptr %IntStruct, %IntStruct* %36, i32 0, i32 1
+	store i32 0, i32* %37
+	store %IntStruct* %36, %IntStruct** %34
+	br label %while_cond_0
 
-if_then_0:
-	%21 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_3 to %StringStruct*), i32 0, i32 0
-	%22 = load i8*, i8** %21
-	%23 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%24 = call i32 (i8*, ...) @printf(i8* %23, i8* %22)
-	%25 = load %Main_struct*, %Main_struct** %3
-	br label %if_end_2
+while_cond_0:
+	%38 = load %IntStruct*, %IntStruct** %34
+	%39 = load %IntStruct*, %IntStruct** %9
+	%40 = getelementptr %IntStruct, %IntStruct* %38, i32 0, i32 1
+	%41 = load i32, i32* %40
+	%42 = getelementptr %IntStruct, %IntStruct* %39, i32 0, i32 1
+	%43 = load i32, i32* %42
+	%44 = icmp slt i32 %41, %43
+	%45 = call i8* @malloc(i64 16)
+	%46 = bitcast i8* %45 to %BoolStruct*
+	%47 = getelementptr %BoolStruct, %BoolStruct* %46, i32 0, i32 1
+	store i1 %44, i1* %47
+	%48 = getelementptr %BoolStruct, %BoolStruct* %46, i32 0, i32 1
+	%49 = load i1, i1* %48
+	%50 = icmp ne i1 %49, false
+	br i1 %50, label %while_body_1, label %while_end_2
 
-if_else_1:
-	%26 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_5 to %StringStruct*), i32 0, i32 0
-	%27 = load i8*, i8** %26
-	%28 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%29 = call i32 (i8*, ...) @printf(i8* %28, i8* %27)
-	%30 = load %Main_struct*, %Main_struct** %3
-	br label %if_end_2
-
-if_end_2:
-	%31 = phi %Main_struct* [ %25, %if_then_0 ], [ %30, %if_else_1 ]
-	%32 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_7 to %StringStruct*), i32 0, i32 0
-	%33 = load i8*, i8** %32
-	%34 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%35 = call i32 (i8*, ...) @printf(i8* %34, i8* %33)
-	%36 = load %Main_struct*, %Main_struct** %3
-	%37 = load %ArrayStruct*, %ArrayStruct** %4
-	%38 = bitcast %ArrayStruct* %37 to %ObjectStruct*
-	%39 = call i8* @malloc(i64 16)
-	%40 = bitcast i8* %39 to %IntStruct*
-	%41 = getelementptr %IntStruct, %IntStruct* %40, i32 0, i32 1
-	store i32 3, i32* %41
-	%42 = call i8* @malloc(i64 16)
-	%43 = bitcast i8* %42 to %IntStruct*
-	%44 = getelementptr %IntStruct, %IntStruct* %43, i32 0, i32 1
-	store i32 3, i32* %44
-	%45 = getelementptr %IntStruct, %IntStruct* %43, i32 0, i32 1
-	%46 = load i32, i32* %45
-	%47 = sext i32 %46 to i64
-	%48 = call %ArrayStruct* @Array_resize(%ObjectStruct* %38, i64 %47)
-	%49 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_9 to %StringStruct*), i32 0, i32 0
-	%50 = load i8*, i8** %49
-	%51 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%52 = call i32 (i8*, ...) @printf(i8* %51, i8* %50)
-	%53 = load %Main_struct*, %Main_struct** %3
-	%54 = load %ArrayStruct*, %ArrayStruct** %4
-	%55 = bitcast %ArrayStruct* %54 to %ObjectStruct*
-	%56 = call i8* @malloc(i64 16)
-	%57 = bitcast i8* %56 to %IntStruct*
-	%58 = getelementptr %IntStruct, %IntStruct* %57, i32 0, i32 1
-	store i32 0, i32* %58
-	%59 = call i8* @malloc(i64 16)
-	%60 = bitcast i8* %59 to %IntStruct*
-	%61 = getelementptr %IntStruct, %IntStruct* %60, i32 0, i32 1
-	store i32 0, i32* %61
-	%62 = getelementptr %IntStruct, %IntStruct* %60, i32 0, i32 1
-	%63 = load i32, i32* %62
-	%64 = sext i32 %63 to i64
-	%65 = bitcast %StringStruct* bitcast ({ i8* }* @str_obj_13 to %StringStruct*) to i8*
-	call void @Array_set(%ObjectStruct* %55, i64 %64, i8* %65)
-	%66 = load %ArrayStruct*, %ArrayStruct** %4
-	%67 = bitcast %ArrayStruct* %66 to %ObjectStruct*
-	%68 = call i8* @malloc(i64 16)
-	%69 = bitcast i8* %68 to %IntStruct*
-	%70 = getelementptr %IntStruct, %IntStruct* %69, i32 0, i32 1
-	store i32 1, i32* %70
-	%71 = call i8* @malloc(i64 16)
-	%72 = bitcast i8* %71 to %IntStruct*
-	%73 = getelementptr %IntStruct, %IntStruct* %72, i32 0, i32 1
-	store i32 1, i32* %73
-	%74 = getelementptr %IntStruct, %IntStruct* %72, i32 0, i32 1
-	%75 = load i32, i32* %74
-	%76 = sext i32 %75 to i64
-	%77 = bitcast %StringStruct* bitcast ({ i8* }* @str_obj_17 to %StringStruct*) to i8*
-	call void @Array_set(%ObjectStruct* %67, i64 %76, i8* %77)
-	%78 = load %ArrayStruct*, %ArrayStruct** %4
-	%79 = bitcast %ArrayStruct* %78 to %ObjectStruct*
-	%80 = call i8* @malloc(i64 16)
-	%81 = bitcast i8* %80 to %IntStruct*
-	%82 = getelementptr %IntStruct, %IntStruct* %81, i32 0, i32 1
-	store i32 2, i32* %82
-	%83 = call i8* @malloc(i64 16)
-	%84 = bitcast i8* %83 to %IntStruct*
-	%85 = getelementptr %IntStruct, %IntStruct* %84, i32 0, i32 1
-	store i32 2, i32* %85
-	%86 = getelementptr %IntStruct, %IntStruct* %84, i32 0, i32 1
-	%87 = load i32, i32* %86
-	%88 = sext i32 %87 to i64
-	%89 = bitcast %StringStruct* bitcast ({ i8* }* @str_obj_21 to %StringStruct*) to i8*
-	call void @Array_set(%ObjectStruct* %79, i64 %88, i8* %89)
-	%90 = alloca %IntStruct*
-	%91 = bitcast %IntStruct** null to %IntStruct*
-	store %IntStruct* %91, %IntStruct** %90
-	%92 = load %ArrayStruct*, %ArrayStruct** %4
-	%93 = bitcast %ArrayStruct* %92 to %ObjectStruct*
+while_body_1:
+	%51 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_5 to %StringStruct*), i32 0, i32 0
+	%52 = load i8*, i8** %51
+	%53 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%54 = call i32 (i8*, ...) @printf(i8* %53, i8* %52)
+	%55 = load %Main_struct*, %Main_struct** %3
+	%56 = load %IntStruct*, %IntStruct** %34
+	%57 = getelementptr %IntStruct, %IntStruct* %56, i32 0, i32 1
+	%58 = load i32, i32* %57
+	%59 = getelementptr [3 x i8], [3 x i8]* @fmt_int_1, i32 0, i32 0
+	%60 = call i32 (i8*, ...) @printf(i8* %59, i32 %58)
+	%61 = load %Main_struct*, %Main_struct** %3
+	%62 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_7 to %StringStruct*), i32 0, i32 0
+	%63 = load i8*, i8** %62
+	%64 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%65 = call i32 (i8*, ...) @printf(i8* %64, i8* %63)
+	%66 = load %Main_struct*, %Main_struct** %3
+	%67 = alloca %IntStruct*
+	%68 = alloca i32
+	%69 = getelementptr [3 x i8], [3 x i8]* @fmt_int_in_3, i32 0, i32 0
+	%70 = call i32 (i8*, ...) @scanf(i8* %69, i32* %68)
+	%71 = load i32, i32* %68
+	%72 = call i8* @malloc(i64 16)
+	%73 = bitcast i8* %72 to %IntStruct*
+	%74 = getelementptr %IntStruct, %IntStruct* %73, i32 0, i32 1
+	store i32 %71, i32* %74
+	store %IntStruct* %73, %IntStruct** %67
+	%75 = load %ArrayStruct*, %ArrayStruct** %17
+	%76 = bitcast %ArrayStruct* %75 to %ObjectStruct*
+	%77 = load %IntStruct*, %IntStruct** %34
+	%78 = load %IntStruct*, %IntStruct** %67
+	%79 = load %IntStruct*, %IntStruct** %34
+	%80 = getelementptr %IntStruct, %IntStruct* %79, i32 0, i32 1
+	%81 = load i32, i32* %80
+	%82 = sext i32 %81 to i64
+	%83 = load %IntStruct*, %IntStruct** %67
+	%84 = bitcast %IntStruct* %83 to i8*
+	call void @Array_set(%ObjectStruct* %76, i64 %82, i8* %84)
+	%85 = load %IntStruct*, %IntStruct** %34
+	%86 = call i8* @malloc(i64 16)
+	%87 = bitcast i8* %86 to %IntStruct*
+	%88 = getelementptr %IntStruct, %IntStruct* %87, i32 0, i32 1
+	store i32 1, i32* %88
+	%89 = getelementptr %IntStruct, %IntStruct* %85, i32 0, i32 1
+	%90 = load i32, i32* %89
+	%91 = getelementptr %IntStruct, %IntStruct* %87, i32 0, i32 1
+	%92 = load i32, i32* %91
+	%93 = add i32 %90, %92
 	%94 = call i8* @malloc(i64 16)
 	%95 = bitcast i8* %94 to %IntStruct*
 	%96 = getelementptr %IntStruct, %IntStruct* %95, i32 0, i32 1
-	store i32 1, i32* %96
-	%97 = call i8* @malloc(i64 16)
-	%98 = bitcast i8* %97 to %IntStruct*
-	%99 = getelementptr %IntStruct, %IntStruct* %98, i32 0, i32 1
-	store i32 1, i32* %99
-	%100 = getelementptr %IntStruct, %IntStruct* %98, i32 0, i32 1
-	%101 = load i32, i32* %100
-	%102 = sext i32 %101 to i64
-	%103 = call i8* @Array_get(%ObjectStruct* %93, i64 %102)
+	store i32 %93, i32* %96
+	store %IntStruct* %95, %IntStruct** %34
+	br label %while_cond_0
+
+while_end_2:
+	%97 = alloca %IntStruct*
+	%98 = call i8* @malloc(i64 16)
+	%99 = bitcast i8* %98 to %IntStruct*
+	%100 = getelementptr %IntStruct, %IntStruct* %99, i32 0, i32 1
+	store i32 0, i32* %100
+	store %IntStruct* %99, %IntStruct** %97
+	br label %while_cond_3
+
+while_cond_3:
+	%101 = load %IntStruct*, %IntStruct** %97
+	%102 = load %IntStruct*, %IntStruct** %9
+	%103 = call i8* @malloc(i64 16)
 	%104 = bitcast i8* %103 to %IntStruct*
-	%105 = load %Main_struct*, %Main_struct** %3
-	%106 = getelementptr %IntStruct*, %Main_struct* %105, i32 1
-	store %IntStruct* %104, %IntStruct** %106
-	%107 = load %ArrayStruct*, %ArrayStruct** %4
-	%108 = bitcast %ArrayStruct* %107 to %ObjectStruct*
-	%109 = call i8* @malloc(i64 16)
-	%110 = bitcast i8* %109 to %IntStruct*
-	%111 = getelementptr %IntStruct, %IntStruct* %110, i32 0, i32 1
-	store i32 0, i32* %111
-	%112 = call i8* @malloc(i64 16)
-	%113 = bitcast i8* %112 to %IntStruct*
-	%114 = getelementptr %IntStruct, %IntStruct* %113, i32 0, i32 1
-	store i32 0, i32* %114
-	%115 = getelementptr %IntStruct, %IntStruct* %113, i32 0, i32 1
-	%116 = load i32, i32* %115
-	%117 = sext i32 %116 to i64
-	%118 = call i8* @Array_get(%ObjectStruct* %108, i64 %117)
-	%119 = bitcast i8* %118 to %IntStruct*
-	%120 = getelementptr %StringStruct, %IntStruct* %119, i32 0, i32 0
-	%121 = load i8*, i8** %120
-	%122 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%123 = call i32 (i8*, ...) @printf(i8* %122, i8* %121)
-	%124 = load %Main_struct*, %Main_struct** %3
-	%125 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_23 to %StringStruct*), i32 0, i32 0
-	%126 = load i8*, i8** %125
-	%127 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%128 = call i32 (i8*, ...) @printf(i8* %127, i8* %126)
-	%129 = load %Main_struct*, %Main_struct** %3
-	%130 = load %ArrayStruct*, %ArrayStruct** %4
-	%131 = bitcast %ArrayStruct* %130 to %ObjectStruct*
-	%132 = call i8* @malloc(i64 16)
-	%133 = bitcast i8* %132 to %IntStruct*
-	%134 = getelementptr %IntStruct, %IntStruct* %133, i32 0, i32 1
-	store i32 1, i32* %134
+	%105 = getelementptr %IntStruct, %IntStruct* %104, i32 0, i32 1
+	store i32 1, i32* %105
+	%106 = getelementptr %IntStruct, %IntStruct* %102, i32 0, i32 1
+	%107 = load i32, i32* %106
+	%108 = getelementptr %IntStruct, %IntStruct* %104, i32 0, i32 1
+	%109 = load i32, i32* %108
+	%110 = sub i32 %107, %109
+	%111 = call i8* @malloc(i64 16)
+	%112 = bitcast i8* %111 to %IntStruct*
+	%113 = getelementptr %IntStruct, %IntStruct* %112, i32 0, i32 1
+	store i32 %110, i32* %113
+	%114 = getelementptr %IntStruct, %IntStruct* %101, i32 0, i32 1
+	%115 = load i32, i32* %114
+	%116 = getelementptr %IntStruct, %IntStruct* %112, i32 0, i32 1
+	%117 = load i32, i32* %116
+	%118 = icmp slt i32 %115, %117
+	%119 = call i8* @malloc(i64 16)
+	%120 = bitcast i8* %119 to %BoolStruct*
+	%121 = getelementptr %BoolStruct, %BoolStruct* %120, i32 0, i32 1
+	store i1 %118, i1* %121
+	%122 = getelementptr %BoolStruct, %BoolStruct* %120, i32 0, i32 1
+	%123 = load i1, i1* %122
+	%124 = icmp ne i1 %123, false
+	br i1 %124, label %while_body_4, label %while_end_5
+
+while_body_4:
+	%125 = alloca %IntStruct*
+	%126 = call i8* @malloc(i64 16)
+	%127 = bitcast i8* %126 to %IntStruct*
+	%128 = getelementptr %IntStruct, %IntStruct* %127, i32 0, i32 1
+	store i32 0, i32* %128
+	store %IntStruct* %127, %IntStruct** %125
+	br label %while_cond_6
+
+while_end_5:
+	%129 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_9 to %StringStruct*), i32 0, i32 0
+	%130 = load i8*, i8** %129
+	%131 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%132 = call i32 (i8*, ...) @printf(i8* %131, i8* %130)
+	%133 = load %Main_struct*, %Main_struct** %3
+	%134 = alloca %IntStruct*
 	%135 = call i8* @malloc(i64 16)
 	%136 = bitcast i8* %135 to %IntStruct*
 	%137 = getelementptr %IntStruct, %IntStruct* %136, i32 0, i32 1
-	store i32 1, i32* %137
-	%138 = getelementptr %IntStruct, %IntStruct* %136, i32 0, i32 1
-	%139 = load i32, i32* %138
-	%140 = sext i32 %139 to i64
-	%141 = call i8* @Array_get(%ObjectStruct* %131, i64 %140)
-	%142 = bitcast i8* %141 to %IntStruct*
-	%143 = getelementptr %StringStruct, %IntStruct* %142, i32 0, i32 0
-	%144 = load i8*, i8** %143
-	%145 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%146 = call i32 (i8*, ...) @printf(i8* %145, i8* %144)
-	%147 = load %Main_struct*, %Main_struct** %3
-	%148 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_25 to %StringStruct*), i32 0, i32 0
-	%149 = load i8*, i8** %148
-	%150 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%151 = call i32 (i8*, ...) @printf(i8* %150, i8* %149)
-	%152 = load %Main_struct*, %Main_struct** %3
-	%153 = load %ArrayStruct*, %ArrayStruct** %4
-	%154 = bitcast %ArrayStruct* %153 to %ObjectStruct*
-	%155 = call %IntStruct* @Array_length(%ObjectStruct* %154)
-	%156 = getelementptr %IntStruct, %IntStruct* %155, i32 0, i32 1
-	%157 = load i32, i32* %156
-	%158 = getelementptr [3 x i8], [3 x i8]* @fmt_int_1, i32 0, i32 0
-	%159 = call i32 (i8*, ...) @printf(i8* %158, i32 %157)
-	%160 = load %Main_struct*, %Main_struct** %3
-	%161 = bitcast %Main_struct* %160 to %ObjectStruct*
-	ret %ObjectStruct* %161
+	store i32 0, i32* %137
+	store %IntStruct* %136, %IntStruct** %134
+	br label %while_cond_12
+
+while_cond_6:
+	%138 = load %IntStruct*, %IntStruct** %125
+	%139 = load %IntStruct*, %IntStruct** %9
+	%140 = call i8* @malloc(i64 16)
+	%141 = bitcast i8* %140 to %IntStruct*
+	%142 = getelementptr %IntStruct, %IntStruct* %141, i32 0, i32 1
+	store i32 1, i32* %142
+	%143 = getelementptr %IntStruct, %IntStruct* %139, i32 0, i32 1
+	%144 = load i32, i32* %143
+	%145 = getelementptr %IntStruct, %IntStruct* %141, i32 0, i32 1
+	%146 = load i32, i32* %145
+	%147 = sub i32 %144, %146
+	%148 = call i8* @malloc(i64 16)
+	%149 = bitcast i8* %148 to %IntStruct*
+	%150 = getelementptr %IntStruct, %IntStruct* %149, i32 0, i32 1
+	store i32 %147, i32* %150
+	%151 = load %IntStruct*, %IntStruct** %97
+	%152 = getelementptr %IntStruct, %IntStruct* %149, i32 0, i32 1
+	%153 = load i32, i32* %152
+	%154 = getelementptr %IntStruct, %IntStruct* %151, i32 0, i32 1
+	%155 = load i32, i32* %154
+	%156 = sub i32 %153, %155
+	%157 = call i8* @malloc(i64 16)
+	%158 = bitcast i8* %157 to %IntStruct*
+	%159 = getelementptr %IntStruct, %IntStruct* %158, i32 0, i32 1
+	store i32 %156, i32* %159
+	%160 = getelementptr %IntStruct, %IntStruct* %138, i32 0, i32 1
+	%161 = load i32, i32* %160
+	%162 = getelementptr %IntStruct, %IntStruct* %158, i32 0, i32 1
+	%163 = load i32, i32* %162
+	%164 = icmp slt i32 %161, %163
+	%165 = call i8* @malloc(i64 16)
+	%166 = bitcast i8* %165 to %BoolStruct*
+	%167 = getelementptr %BoolStruct, %BoolStruct* %166, i32 0, i32 1
+	store i1 %164, i1* %167
+	%168 = getelementptr %BoolStruct, %BoolStruct* %166, i32 0, i32 1
+	%169 = load i1, i1* %168
+	%170 = icmp ne i1 %169, false
+	br i1 %170, label %while_body_7, label %while_end_8
+
+while_body_7:
+	%171 = alloca %IntStruct*
+	%172 = load %ArrayStruct*, %ArrayStruct** %17
+	%173 = bitcast %ArrayStruct* %172 to %ObjectStruct*
+	%174 = load %IntStruct*, %IntStruct** %125
+	%175 = load %IntStruct*, %IntStruct** %125
+	%176 = getelementptr %IntStruct, %IntStruct* %175, i32 0, i32 1
+	%177 = load i32, i32* %176
+	%178 = sext i32 %177 to i64
+	%179 = call i8* @Array_get(%ObjectStruct* %173, i64 %178)
+	%180 = bitcast i8* %179 to %IntStruct*
+	store %IntStruct* %180, %IntStruct** %171
+	%181 = alloca %IntStruct*
+	%182 = load %ArrayStruct*, %ArrayStruct** %17
+	%183 = bitcast %ArrayStruct* %182 to %ObjectStruct*
+	%184 = load %IntStruct*, %IntStruct** %125
+	%185 = call i8* @malloc(i64 16)
+	%186 = bitcast i8* %185 to %IntStruct*
+	%187 = getelementptr %IntStruct, %IntStruct* %186, i32 0, i32 1
+	store i32 1, i32* %187
+	%188 = getelementptr %IntStruct, %IntStruct* %184, i32 0, i32 1
+	%189 = load i32, i32* %188
+	%190 = getelementptr %IntStruct, %IntStruct* %186, i32 0, i32 1
+	%191 = load i32, i32* %190
+	%192 = add i32 %189, %191
+	%193 = call i8* @malloc(i64 16)
+	%194 = bitcast i8* %193 to %IntStruct*
+	%195 = getelementptr %IntStruct, %IntStruct* %194, i32 0, i32 1
+	store i32 %192, i32* %195
+	%196 = load %IntStruct*, %IntStruct** %125
+	%197 = call i8* @malloc(i64 16)
+	%198 = bitcast i8* %197 to %IntStruct*
+	%199 = getelementptr %IntStruct, %IntStruct* %198, i32 0, i32 1
+	store i32 1, i32* %199
+	%200 = getelementptr %IntStruct, %IntStruct* %196, i32 0, i32 1
+	%201 = load i32, i32* %200
+	%202 = getelementptr %IntStruct, %IntStruct* %198, i32 0, i32 1
+	%203 = load i32, i32* %202
+	%204 = add i32 %201, %203
+	%205 = call i8* @malloc(i64 16)
+	%206 = bitcast i8* %205 to %IntStruct*
+	%207 = getelementptr %IntStruct, %IntStruct* %206, i32 0, i32 1
+	store i32 %204, i32* %207
+	%208 = getelementptr %IntStruct, %IntStruct* %206, i32 0, i32 1
+	%209 = load i32, i32* %208
+	%210 = sext i32 %209 to i64
+	%211 = call i8* @Array_get(%ObjectStruct* %183, i64 %210)
+	%212 = bitcast i8* %211 to %IntStruct*
+	store %IntStruct* %212, %IntStruct** %181
+	%213 = load %IntStruct*, %IntStruct** %181
+	%214 = load %IntStruct*, %IntStruct** %171
+	%215 = getelementptr %IntStruct, %IntStruct* %213, i32 0, i32 1
+	%216 = load i32, i32* %215
+	%217 = getelementptr %IntStruct, %IntStruct* %214, i32 0, i32 1
+	%218 = load i32, i32* %217
+	%219 = icmp slt i32 %216, %218
+	%220 = call i8* @malloc(i64 16)
+	%221 = bitcast i8* %220 to %BoolStruct*
+	%222 = getelementptr %BoolStruct, %BoolStruct* %221, i32 0, i32 1
+	store i1 %219, i1* %222
+	%223 = getelementptr %BoolStruct, %BoolStruct* %221, i32 0, i32 1
+	%224 = load i1, i1* %223
+	%225 = icmp ne i1 %224, false
+	br i1 %225, label %if_then_9, label %if_else_10
+
+while_end_8:
+	%226 = load %IntStruct*, %IntStruct** %97
+	%227 = call i8* @malloc(i64 16)
+	%228 = bitcast i8* %227 to %IntStruct*
+	%229 = getelementptr %IntStruct, %IntStruct* %228, i32 0, i32 1
+	store i32 1, i32* %229
+	%230 = getelementptr %IntStruct, %IntStruct* %226, i32 0, i32 1
+	%231 = load i32, i32* %230
+	%232 = getelementptr %IntStruct, %IntStruct* %228, i32 0, i32 1
+	%233 = load i32, i32* %232
+	%234 = add i32 %231, %233
+	%235 = call i8* @malloc(i64 16)
+	%236 = bitcast i8* %235 to %IntStruct*
+	%237 = getelementptr %IntStruct, %IntStruct* %236, i32 0, i32 1
+	store i32 %234, i32* %237
+	store %IntStruct* %236, %IntStruct** %97
+	br label %while_cond_3
+
+if_then_9:
+	%238 = load %ArrayStruct*, %ArrayStruct** %17
+	%239 = bitcast %ArrayStruct* %238 to %ObjectStruct*
+	%240 = load %IntStruct*, %IntStruct** %125
+	%241 = load %IntStruct*, %IntStruct** %181
+	%242 = load %IntStruct*, %IntStruct** %125
+	%243 = getelementptr %IntStruct, %IntStruct* %242, i32 0, i32 1
+	%244 = load i32, i32* %243
+	%245 = sext i32 %244 to i64
+	%246 = load %IntStruct*, %IntStruct** %181
+	%247 = bitcast %IntStruct* %246 to i8*
+	call void @Array_set(%ObjectStruct* %239, i64 %245, i8* %247)
+	%248 = load %ArrayStruct*, %ArrayStruct** %17
+	%249 = bitcast %ArrayStruct* %248 to %ObjectStruct*
+	%250 = load %IntStruct*, %IntStruct** %125
+	%251 = call i8* @malloc(i64 16)
+	%252 = bitcast i8* %251 to %IntStruct*
+	%253 = getelementptr %IntStruct, %IntStruct* %252, i32 0, i32 1
+	store i32 1, i32* %253
+	%254 = getelementptr %IntStruct, %IntStruct* %250, i32 0, i32 1
+	%255 = load i32, i32* %254
+	%256 = getelementptr %IntStruct, %IntStruct* %252, i32 0, i32 1
+	%257 = load i32, i32* %256
+	%258 = add i32 %255, %257
+	%259 = call i8* @malloc(i64 16)
+	%260 = bitcast i8* %259 to %IntStruct*
+	%261 = getelementptr %IntStruct, %IntStruct* %260, i32 0, i32 1
+	store i32 %258, i32* %261
+	%262 = load %IntStruct*, %IntStruct** %171
+	%263 = load %IntStruct*, %IntStruct** %125
+	%264 = call i8* @malloc(i64 16)
+	%265 = bitcast i8* %264 to %IntStruct*
+	%266 = getelementptr %IntStruct, %IntStruct* %265, i32 0, i32 1
+	store i32 1, i32* %266
+	%267 = getelementptr %IntStruct, %IntStruct* %263, i32 0, i32 1
+	%268 = load i32, i32* %267
+	%269 = getelementptr %IntStruct, %IntStruct* %265, i32 0, i32 1
+	%270 = load i32, i32* %269
+	%271 = add i32 %268, %270
+	%272 = call i8* @malloc(i64 16)
+	%273 = bitcast i8* %272 to %IntStruct*
+	%274 = getelementptr %IntStruct, %IntStruct* %273, i32 0, i32 1
+	store i32 %271, i32* %274
+	%275 = getelementptr %IntStruct, %IntStruct* %273, i32 0, i32 1
+	%276 = load i32, i32* %275
+	%277 = sext i32 %276 to i64
+	%278 = load %IntStruct*, %IntStruct** %171
+	%279 = bitcast %IntStruct* %278 to i8*
+	call void @Array_set(%ObjectStruct* %249, i64 %277, i8* %279)
+	br label %if_end_11
+
+if_else_10:
+	br label %if_end_11
+
+if_end_11:
+	%280 = phi %ObjectStruct* [ %249, %if_then_9 ], [ null, %if_else_10 ]
+	%281 = load %IntStruct*, %IntStruct** %125
+	%282 = call i8* @malloc(i64 16)
+	%283 = bitcast i8* %282 to %IntStruct*
+	%284 = getelementptr %IntStruct, %IntStruct* %283, i32 0, i32 1
+	store i32 1, i32* %284
+	%285 = getelementptr %IntStruct, %IntStruct* %281, i32 0, i32 1
+	%286 = load i32, i32* %285
+	%287 = getelementptr %IntStruct, %IntStruct* %283, i32 0, i32 1
+	%288 = load i32, i32* %287
+	%289 = add i32 %286, %288
+	%290 = call i8* @malloc(i64 16)
+	%291 = bitcast i8* %290 to %IntStruct*
+	%292 = getelementptr %IntStruct, %IntStruct* %291, i32 0, i32 1
+	store i32 %289, i32* %292
+	store %IntStruct* %291, %IntStruct** %125
+	br label %while_cond_6
+
+while_cond_12:
+	%293 = load %IntStruct*, %IntStruct** %134
+	%294 = load %IntStruct*, %IntStruct** %9
+	%295 = getelementptr %IntStruct, %IntStruct* %293, i32 0, i32 1
+	%296 = load i32, i32* %295
+	%297 = getelementptr %IntStruct, %IntStruct* %294, i32 0, i32 1
+	%298 = load i32, i32* %297
+	%299 = icmp slt i32 %296, %298
+	%300 = call i8* @malloc(i64 16)
+	%301 = bitcast i8* %300 to %BoolStruct*
+	%302 = getelementptr %BoolStruct, %BoolStruct* %301, i32 0, i32 1
+	store i1 %299, i1* %302
+	%303 = getelementptr %BoolStruct, %BoolStruct* %301, i32 0, i32 1
+	%304 = load i1, i1* %303
+	%305 = icmp ne i1 %304, false
+	br i1 %305, label %while_body_13, label %while_end_14
+
+while_body_13:
+	%306 = load %ArrayStruct*, %ArrayStruct** %17
+	%307 = bitcast %ArrayStruct* %306 to %ObjectStruct*
+	%308 = load %IntStruct*, %IntStruct** %134
+	%309 = load %IntStruct*, %IntStruct** %134
+	%310 = getelementptr %IntStruct, %IntStruct* %309, i32 0, i32 1
+	%311 = load i32, i32* %310
+	%312 = sext i32 %311 to i64
+	%313 = call i8* @Array_get(%ObjectStruct* %307, i64 %312)
+	%314 = bitcast i8* %313 to %IntStruct*
+	%315 = getelementptr %IntStruct, %IntStruct* %314, i32 0, i32 1
+	%316 = load i32, i32* %315
+	%317 = getelementptr [3 x i8], [3 x i8]* @fmt_int_1, i32 0, i32 0
+	%318 = call i32 (i8*, ...) @printf(i8* %317, i32 %316)
+	%319 = load %Main_struct*, %Main_struct** %3
+	%320 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_11 to %StringStruct*), i32 0, i32 0
+	%321 = load i8*, i8** %320
+	%322 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%323 = call i32 (i8*, ...) @printf(i8* %322, i8* %321)
+	%324 = load %Main_struct*, %Main_struct** %3
+	%325 = load %IntStruct*, %IntStruct** %134
+	%326 = call i8* @malloc(i64 16)
+	%327 = bitcast i8* %326 to %IntStruct*
+	%328 = getelementptr %IntStruct, %IntStruct* %327, i32 0, i32 1
+	store i32 1, i32* %328
+	%329 = getelementptr %IntStruct, %IntStruct* %325, i32 0, i32 1
+	%330 = load i32, i32* %329
+	%331 = getelementptr %IntStruct, %IntStruct* %327, i32 0, i32 1
+	%332 = load i32, i32* %331
+	%333 = add i32 %330, %332
+	%334 = call i8* @malloc(i64 16)
+	%335 = bitcast i8* %334 to %IntStruct*
+	%336 = getelementptr %IntStruct, %IntStruct* %335, i32 0, i32 1
+	store i32 %333, i32* %336
+	store %IntStruct* %335, %IntStruct** %134
+	br label %while_cond_12
+
+while_end_14:
+	%337 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_13 to %StringStruct*), i32 0, i32 0
+	%338 = load i8*, i8** %337
+	%339 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%340 = call i32 (i8*, ...) @printf(i8* %339, i8* %338)
+	%341 = load %Main_struct*, %Main_struct** %3
+	%342 = load %Main_struct*, %Main_struct** %3
+	%343 = bitcast %Main_struct* %342 to %ObjectStruct*
+	ret %ObjectStruct* %343
 }

@@ -42,34 +42,34 @@ class Main inherits IO {
     main() : Int {
         {
             -- Test 1: Factorial
-            self.out_string("Enter a number for factorial: ");
-            let n : Int <- self.in_int() in {
+            out_string("Enter a number for factorial: ");
+            let n : Int <- in_int() in {
                 let f : Int <- self.factorial(n) in {
-                    self.out_string("Factorial is: ");
-                    self.out_int(f);
-                    self.out_string("\n")
+                    out_string("Factorial is: ");
+                    out_int(f);
+                    out_string("\n")
                 }
             };
 
             -- Test 2: Fibonacci
-            self.out_string("Enter a number for fibonacci: ");
-            let m : Int <- self.in_int() in {
+            out_string("Enter a number for fibonacci: ");
+            let m : Int <- in_int() in {
                 let fib : Int <- self.fibonacci(m) in {
-                    self.out_string("Fibonacci is: ");
-                    self.out_int(fib);
-                    self.out_string("\n")
+                    out_string("Fibonacci is: ");
+                    out_int(fib);
+                    out_string("\n")
                 }
             };
 
-            self.out_string("Enter a number for sumTo: ");
+            out_string("Enter a number for sumTo: ");
             let t : Int <- in_int() in {
-                let s : Int <- self.sumTo(t) in {
+                let s : Int <- sumTo(t) in {
                     out_string("Sum is: ");
                     out_int(s);
                     out_string("\n")
                 }
             };
-            self.out_string("Complex calculation (complexCalculation(5,3,2)) returns: ");
+            out_string("Complex calculation (complexCalculation(5,3,2)) returns: ");
             let r : Int <- self.complexCalculation(5, 3, 2) in {
                 out_int(r);
                 out_string("\n")
