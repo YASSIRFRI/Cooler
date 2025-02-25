@@ -19,7 +19,7 @@ class Sum {
 
 
 class Main inherits IO{
-    main() : Object {
+    main() : SELF_TYPE {
         {
             let s : Sum <- new Sum in {
                 s.init(10,10);
