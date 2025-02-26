@@ -389,14 +389,9 @@ func (cg *CodeGenerator) declareMalloc() {
     cg.module.NewFunc("malloc", types.NewPointer(types.I8), ir.NewParam("size", types.I64))
 }
 
-// --------------------------------------------------------------------------
-// Built‐in String Methods
-// --------------------------------------------------------------------------
 func (cg *CodeGenerator) defineStringLength() {
-    // Param: the String object (as i8* data is in field #1)
     param := ir.NewParam("str", cg.stringType)
 
-    // **Return type is now i32**, not IntStruct*
     fn := cg.module.NewFunc("String_length", types.I32, param)
     entry := fn.NewBlock("entry")
 
@@ -419,18 +414,13 @@ func (cg *CodeGenerator) defineStringLength() {
     charPtrIndexed := loopBlock.NewGetElementPtr(types.I8, charPtr, counter)
     ch := loopBlock.NewLoad(types.I8, charPtrIndexed)
     cmp := loopBlock.NewICmp(enum.IPredEQ, ch, constant.NewInt(types.I8, 0))
-
     incBlock := fn.NewBlock("inc")
     exitBlock := fn.NewBlock("exit")
     loopBlock.NewCondBr(cmp, exitBlock, incBlock)
-
     counterNext := incBlock.NewAdd(counter, constant.NewInt(types.I32, 1))
     incBlock.NewStore(counterNext, counterAlloca)
     incBlock.NewBr(loopBlock)
-
     retVal := exitBlock.NewLoad(types.I32, counterAlloca)
-
-    // Directly return i32
     exitBlock.NewRet(retVal)
 }
 
@@ -440,8 +430,6 @@ func (cg *CodeGenerator) defineStringConcat() {
     s2 := ir.NewParam("other", cg.stringType)
     fn := cg.module.NewFunc("String_concat", cg.stringType, s1, s2)
     entry := fn.NewBlock("entry")
-
-    // Load the i8* from both string objects
     charPtrPtr1 := entry.NewGetElementPtr(
         cg.stringStruct, fn.Params[0],
         constant.NewInt(types.I32, 0),
@@ -605,14 +593,10 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
         }
     }
 
-    // 4. Process attributes with proper forward references
     for _, feat := range classNode.Features {
         if attr, ok := feat.(*parser.Attribute); ok {
             key := fmt.Sprintf("%s.%s", classNode.Name, attr.Ident)
-            
-            // Get actual type using classPtrTypes (handles forward references)
             attrType := cg.getClassPtrType(attr.Type)
-            
             if _, exists := cg.attributeIndices[key]; !exists {
                 cg.attributeIndices[key] = index
                 cg.attributeTypeEnv[key] = attr.Type
@@ -805,9 +789,6 @@ func (cg *CodeGenerator) buildDispatchTable(classNode *parser.Class, classMap ma
     cg.dispatchTables[classNode.Name] = vtableGlobal
 }
 
-// --------------------------------------------------------------------------
-// genExpr: Expression code generation
-// --------------------------------------------------------------------------
 func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
     switch n := node.(type) {
 
@@ -1169,13 +1150,11 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         return result
 
     case *parser.Case:
-        // Generate the case expression value
         exprVal := cg.genExpr(n.Expr)
         if len(n.TypeActions) == 0 {
             return constant.NewNull(types.NewPointer(types.I8))
         }
     
-        // Get object type information
         exprObj := cg.currentBlock.NewBitCast(exprVal, cg.getClassPtrType("Object"))
         typePtr := cg.currentBlock.NewGetElementPtr(
             cg.objectStruct,
@@ -1185,67 +1164,45 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         )
         objType := cg.currentBlock.NewLoad(types.NewPointer(types.I8), typePtr)
     
-        // Create control flow blocks
         origBlock := cg.currentBlock
         exitBlock := cg.currentFunc.NewBlock(cg.newUniqueName("case_exit"))
         var phiOps []*ir.Incoming
         currentTestBlock := origBlock
-    
-        // Process each branch with proper type checking
         for i, branch := range n.TypeActions {
             branchBlock := cg.currentFunc.NewBlock(cg.newUniqueName("case_branch"))
             nextTestBlock := cg.currentFunc.NewBlock(cg.newUniqueName("case_test"))
-    
-            // Get branch type vtable
             branchType := branch.Type
             if isBuiltIn(branchType) {
-                branchType = "Object"  // Builtins use Object's vtable
+                branchType = "Object" 
             }
             branchVTable := cg.dispatchTables[branchType]
-    
-            // Compare object type with branch type
             cmp := currentTestBlock.NewICmp(
                 enum.IPredEQ,
                 objType,
                 constant.NewBitCast(branchVTable, types.NewPointer(types.I8)),
             )
             currentTestBlock.NewCondBr(cmp, branchBlock, nextTestBlock)
-    
-            // Process successful type match
             cg.currentBlock = branchBlock
-            
-            // Create environment for this branch
             oldEnv := cg.variableEnv
             newEnv := make(map[string]*ir.InstAlloca)
             for k, v := range oldEnv {
                 newEnv[k] = v
             }
             cg.variableEnv = newEnv
-    
-            // Cast and store the actual expression value
             castedVal := cg.currentBlock.NewBitCast(exprVal, cg.getClassPtrType(branch.Type))
             alloca := cg.currentBlock.NewAlloca(cg.getClassPtrType(branch.Type))
             cg.currentBlock.NewStore(castedVal, alloca)
             cg.variableEnv[branch.Ident] = alloca
             cg.variableTypeEnv[branch.Ident] = branch.Type
-    
-            // Generate branch body
             branchResult := cg.genExpr(branch.Expr)
             if !branchResult.Type().Equal(exitBlock.Parent.Sig.RetType) {
                 branchResult = cg.currentBlock.NewBitCast(branchResult, exitBlock.Parent.Sig.RetType)
             }
-    
-            // Add to PHI node and jump to exit
             phiOps = append(phiOps, ir.NewIncoming(branchResult, branchBlock))
             branchBlock.NewBr(exitBlock)
-    
-            // Restore environment and prepare for next test
             cg.variableEnv = oldEnv
             currentTestBlock = nextTestBlock
-    
-            // Handle last branch differently
             if i == len(n.TypeActions)-1 {
-                // Last branch: generate error block for failed matches
                 errorBlock := cg.currentFunc.NewBlock(cg.newUniqueName("case_error"))
                 currentTestBlock.NewBr(errorBlock)
                 cg.currentBlock = errorBlock
@@ -1260,6 +1217,11 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         return phi
 
     case *parser.MethodCall:
+        if n.Method.Ident == "abort" {
+            obj := cg.genExpr(n.Object)
+            abortFn := findFuncByName(cg.module, "Object_abort")
+            return cg.currentBlock.NewCall(abortFn, obj)
+        }
         receiver := cg.genExpr(n.Object)
         receiver = cg.currentBlock.NewBitCast(receiver, cg.getClassPtrType("Object"))
         staticType := cg.currentClass
@@ -1276,7 +1238,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             staticType = newExpr.Type
         }
 
-        // Prepare arguments: first param is the self (receiver)
         args := []value.Value{receiver}
         for _, p := range n.Method.Params {
             args = append(args, cg.genExpr(p))
@@ -1327,7 +1288,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                     indexVal := cg.genExpr(n.Method.Params[0])
                     unboxedIndex := cg.unboxInt(indexVal)
                     index64 := cg.currentBlock.NewSExt(unboxedIndex, types.I64)
-                    // Get value and cast to i8*
                     valueVal := cg.genExpr(n.Method.Params[1])
                     valuePtr := cg.currentBlock.NewBitCast(valueVal, types.NewPointer(types.I8))
                     args := []value.Value{receiver, index64, valuePtr}
@@ -1395,8 +1355,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         )
         // vtPtr is now i8**. Load i8* from it:
         vtField := cg.currentBlock.NewLoad(types.NewPointer(types.I8), vtPtr)
-
-        // bitcast i8* => [N x fn ptr]* so I can do a GEP on the array
         layout := cg.dispatchTableLayouts[staticType]
         commonSelfType := cg.getClassPtrType("Object")
         commonMethodFnType := types.NewFunc(commonSelfType, commonSelfType)

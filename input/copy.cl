@@ -3,7 +3,7 @@ class Main inherits IO {
    main(): Object {
      {
       let a: Int in {
-        let b : String in{
+        let b : Int in{
         a<- 1;
         b<-a.copy();
         out_int(b);
