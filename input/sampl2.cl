@@ -15,7 +15,7 @@
         print(): Object {
             {
                 out_int(item);
-                out_int(item);
+                out_string("\n");
                 if isvoid next then 
                     self 
                 else 
@@ -33,11 +33,7 @@
             in {
                 first.ite(1, second);
                 second.ite(2, third);
-                -- third.ite(3, void);
-                
                 first.print();
-
-                -- While loop example
                 let count: Int <- 0 in
                 while count < 3 loop
                     {

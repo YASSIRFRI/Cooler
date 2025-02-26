@@ -1,5 +1,6 @@
 class Main inherits IO {
-    main() : Object {
+    main() : Object {{
+
         out_string("Enter the size: ");
         let n : Int <- in_int() in {
             let arr : Array <- Array[Int] in {
@@ -28,7 +29,9 @@ class Main inherits IO {
                                             -- Swap arr[j] and arr[j+1]
                                             arr.set(j, b);
                                             arr.set(j + 1, a);
-                                        } fi;
+                                        } else{
+                                          
+                                        }fi;
                                     };
                                 };
                                 j <- j + 1;
@@ -51,5 +54,6 @@ class Main inherits IO {
                 self
             }
         }
+      }
     };
 };

@@ -7,7 +7,6 @@ class Main inherits IO {
         a<- 1;
         b<-a.copy();
         out_int(b);
-        out_int(a);
         }
       }
      }

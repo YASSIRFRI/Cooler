@@ -19,11 +19,7 @@ class Main inherits IO{
         out_string("\n");
         out_string(a.get(1)); 
         out_string("\n");
-        ----out_int(a.get(2)); 
-        out_string("\n");
         out_int(a.length()); 
-        out_string("\n");
-        out_int(a.size());
       }
     }
   };

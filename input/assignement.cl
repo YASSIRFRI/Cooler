@@ -1,10 +1,11 @@
-class Main {
+class Main inherits IO{
     main(): Object {
         {
             let x: Int <- 5, y: Int <- 10 in {
                 x <- x + y;    
                 y <- x - y;   
                 out_int(x);  
+                out_string("\n");
                 out_int(y); 
                 x          
             }
