@@ -26,16 +26,14 @@ func main() {
 	}
 
 	sourceFile := flag.Arg(0)
-	if filepath.Ext(sourceFile) != ".cool" {
-		fmt.Printf("Error: Source file %q must have a .cool extension.\n", sourceFile)
+	if filepath.Ext(sourceFile) != ".cool" || filepath.Ext(sourceFile) == ".cl" {
+		fmt.Printf("Error: Source file %q must have a .cool or .cl extension.\n", sourceFile)
 		os.Exit(1)
 	}
-
 	srcBytes, err := ioutil.ReadFile(sourceFile)
 	if err != nil {
 		log.Fatalf("Error reading source file %q: %v", sourceFile, err)
 	}
-
 	fmt.Println("\033[1;34m========================================\033[0m")
 	fmt.Println("\033[1;34m       Cool Compiler (coolc) v0.1       \033[0m")
 	fmt.Println("\033[1;34m========================================\033[0m")
@@ -59,15 +57,11 @@ func main() {
 	for tok := lx.NextToken(); tok != nil; tok = lx.NextToken() {
 		tokens = append(tokens, tok)
 	}
-	//fmt.Printf("Lexing completed: %d tokens generated.\n", len(tokens))
-
 	p := parser.NewParser(tokens)
 	prog, err := p.ParseProgram()
 	if err != nil {
 		log.Fatalf("Parsing error: %v", err)
 	}
-	//fmt.Println("Parsing completed successfully.")
-
 	analyzer := semant.NewSemanticAnalyzer()
 	analyzer.Analyze(prog)
 	if errs := analyzer.Errors(); len(errs) > 0 {
@@ -77,8 +71,6 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	//fmt.Println("Semantic analysis passed.")
-
 	llvmModule := codegen.CodegenProgram(prog)
 	//fmt.Println(llvmModule)
 	//fmt.Println("IR Code generation completed.")

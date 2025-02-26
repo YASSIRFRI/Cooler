@@ -19,6 +19,66 @@ Cooler transforms COOL source code into optimized LLVM IR, enabling advanced run
 
 ---
 
+
+### Extensions 🌟
+
+Cooler extends the COOL language with powerful features to enhance modularity and data structure capabilities:
+
+#### Module System 📦
+
+- **Description:** Cooler's module system allows you to split your COOL code into multiple files and import them into other files. The compiler automatically searches for imported files in the local directory.
+- **Technical Details:** The preprocessor identifies `import` statements, locates the specified COOL files, and effectively copies the code into the main source file before compilation. This process also detects and prevents cyclic imports, ensuring code integrity.
+- **Usage:**
+  ```cool
+  -- main.cool
+  import "module1.cool";
+  import "module2.cool";
+
+  class Main inherits IO {
+      main() : Object {
+          (new Module1).print();
+      };
+  };
+  ```
+
+#### Container Types 🗄️
+
+Cooler introduces two container types to provide flexible data storage options:
+
+1. **Native Arrays 🚀**
+   - **Description:** Native arrays offer high-performance storage for COOL's native types (Int, String, Bool).
+   - **Technical Details:** Arrays are implemented using COOL builtin types, providing efficient memory access (O(1)). Array bounds are checked at runtime to prevent out-of-bounds errors.
+   - **Usage:**
+     ```cool
+     class Main inherits IO {
+         arr : Array[Int] <- new Array[Int]; -- Initialize an array of 10 Ints by default
+         main() : Object {
+             {
+                 arr.set(0, 5);
+                 out_int(arr.get(0));
+             }
+         };
+     };
+     ```
+
+2. **Generic Linked List ⛓️**
+   - **Description:** A generic container type implemented using a linked list, allowing storage of any COOL object.
+   - **Technical Details:** The linked list provides dynamic resizing and supports insertion, deletion, and search operations. It uses COOL's object system to store elements, ensuring type safety.
+   - **Usage:**
+     ```cool
+     class Main inherits IO {
+         list : List[String] <- new List[String];
+         main() : Object {
+             {
+                 list.insert("hello");
+                 list.insert("world");
+                 list.print(); -- Prints "hello world"
+             }
+         };
+     };
+     ```
+
+
 ## Key Features
 
 ### Lexical Analysis & Preprocessing ✂️
