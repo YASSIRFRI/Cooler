@@ -211,6 +211,7 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.defineStringTypeName()
     cg.declareExit()
     cg.defineObjectBuiltins()
+    cg.defineIntBuiltins() 
     cg.defineIOBuiltins() 
     cg.defineStringSubstr()
     cg.defineArrayMethods()
@@ -287,8 +288,8 @@ func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
     })
     cg.createVTableGlobal("Int", []DispatchEntry{
         {Class: "Object", Method: "abort"},
-        {Class: "Object", Method: "type_name"},
-        {Class: "Object", Method: "copy"},
+        {Class: "Int", Method: "type_name"},
+        {Class: "Int", Method: "copy"},
     })
     cg.createVTableGlobal("String", []DispatchEntry{
         {Class: "Object", Method: "abort"},
@@ -298,7 +299,7 @@ func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
     cg.createVTableGlobal("Bool", []DispatchEntry{
         {Class: "Object", Method: "abort"},
         {Class: "Object", Method: "type_name"},
-        {Class: "Object", Method: "copy"},
+        {Class: "Bool", Method: "copy"},
     })
     cg.createVTableGlobal("IO", []DispatchEntry{
         {Class: "Object", Method: "abort"},
@@ -1947,4 +1948,48 @@ func (cg *CodeGenerator) defineStringCopy() {
     entry.NewStore(origData, dataPtrNew)
 
     entry.NewRet(newStr)
+}
+
+
+func (cg *CodeGenerator) defineIntBuiltins() {
+    copyFn := cg.module.NewFunc(
+        "Int_copy",
+        cg.getClassPtrType("Int"),
+        ir.NewParam("self", cg.getClassPtrType("Int")),
+    )
+    entry := copyFn.NewBlock("entry")
+    mallocFn := findFuncByName(cg.module, "malloc")
+    size := constant.NewInt(types.I64, cg.typeSize(cg.intStruct))
+    rawPtr := entry.NewCall(mallocFn, size)
+    newInt := entry.NewBitCast(rawPtr, cg.getClassPtrType("Int"))
+    vtPtr := entry.NewGetElementPtr(
+        cg.intStruct,
+        copyFn.Params[0],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    vtVal := entry.NewLoad(types.NewPointer(types.I8), vtPtr)
+    newVtPtr := entry.NewGetElementPtr(
+        cg.intStruct,
+        newInt,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    entry.NewStore(vtVal, newVtPtr)
+    valPtr := entry.NewGetElementPtr(
+        cg.intStruct,
+        copyFn.Params[0],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    val := entry.NewLoad(types.I32, valPtr)
+    newValPtr := entry.NewGetElementPtr(
+        cg.intStruct,
+        newInt,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    entry.NewStore(val, newValPtr)
+    
+    entry.NewRet(newInt)
 }

@@ -1,13 +1,13 @@
 class Main inherits IO {
-  a: String;
+  --a: Int;
    main(): Object {
      {
-      let a: String in {
-        let b : String in{
-        a<-"Hello";
+      let a: Int in {
+        let b : Int in{
+        a<- 1;
         b<-a.copy();
-        out_string(b);
-        out_string(a);
+        out_int(b);
+        out_int(a);
         }
       }
      }
