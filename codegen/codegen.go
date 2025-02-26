@@ -208,6 +208,7 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     cg.declareExternalIO()
     cg.defineStringLength()
     cg.defineStringConcat()
+    cg.defineStringTypeName()
     cg.declareExit()
     cg.defineObjectBuiltins()
     cg.defineIOBuiltins() 
@@ -237,6 +238,7 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
     }
 
     cg.buildDispatchTableForBuiltins()
+    cg.defineStringCopy()
     for _, classNode := range prog.Classes {
         cg.buildDispatchTable(classNode, classMap)
     }
@@ -283,8 +285,16 @@ func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
         {Class: "Object", Method: "type_name"},
         {Class: "Object", Method: "copy"},
     })
-    cg.createVTableGlobal("Int", []DispatchEntry{})
-    cg.createVTableGlobal("String", []DispatchEntry{})
+    cg.createVTableGlobal("Int", []DispatchEntry{
+        {Class: "Object", Method: "abort"},
+        {Class: "Object", Method: "type_name"},
+        {Class: "Object", Method: "copy"},
+    })
+    cg.createVTableGlobal("String", []DispatchEntry{
+        {Class: "Object", Method: "abort"},
+        {Class: "String", Method: "type_name"},
+        {Class: "String", Method: "copy"},
+    })
     cg.createVTableGlobal("Bool", []DispatchEntry{
         {Class: "Object", Method: "abort"},
         {Class: "Object", Method: "type_name"},
@@ -1455,26 +1465,27 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 }
 
 func (cg *CodeGenerator) genStringConstantPtr(strVal string) value.Value {
-    strVal = strings.ReplaceAll(strVal, "\\n", "\n")
-    if !strings.HasSuffix(strVal, "\x00") {
-        strVal += "\x00"
-    }
-    arr := constant.NewCharArrayFromString(strVal)
+     strVal = strings.ReplaceAll(strVal, "\\n", "\n")
+     if !strings.HasSuffix(strVal, "\x00") {
+         strVal += "\x00"
+     }
+     arr := constant.NewCharArrayFromString(strVal)
+     arrayName := fmt.Sprintf("str_%d", cg.stringCounter*2)
+     g := cg.module.NewGlobalDef(arrayName, arr)
+     gep := constant.NewGetElementPtr(g.Init.Type(), g)
+     gep.InBounds = true
+     strStruct := types.NewStruct(types.NewPointer(types.I8))
+     init := constant.NewStruct(strStruct, gep)
+     objName := fmt.Sprintf("str_obj_%d", cg.stringCounter*2+1)
+     globStrObj := cg.module.NewGlobalDef(objName, init)
+     globStrObj.Immutable = true
+     ptr := constant.NewBitCast(globStrObj, cg.stringType)
+     cg.stringCounter++
+     return ptr
+ }
 
-    arrayName := fmt.Sprintf("str_%d", cg.stringCounter*2)
-    g := cg.module.NewGlobalDef(arrayName, arr)
-    gep := constant.NewGetElementPtr(g.Init.Type(), g)
-    gep.InBounds = true
-    strStruct := types.NewStruct(types.NewPointer(types.I8))
-    init := constant.NewStruct(strStruct, gep)
-    objName := fmt.Sprintf("str_obj_%d", cg.stringCounter*2+1)
-    globStrObj := cg.module.NewGlobalDef(objName, init)
-    globStrObj.Immutable = true
-    ptr := constant.NewBitCast(globStrObj, cg.stringType)
-    cg.stringCounter++
 
-    return ptr
-}
+
 
 func (cg *CodeGenerator) genCallPrintString(strObj value.Value) value.Value {
     zero := constant.NewInt(types.I32, 0)
@@ -1883,4 +1894,57 @@ func (cg *CodeGenerator) defineArrayMethods() {
     boxedInt := cg.boxInt(len32)
     cg.currentBlock = oldBlock
     entry.NewRet(boxedInt)
+}
+
+func (cg *CodeGenerator) defineStringTypeName() {
+    typeNameFn := cg.module.NewFunc(
+        "String_type_name",
+        cg.stringType,
+        ir.NewParam("self", cg.getClassPtrType("String")),
+    )
+    block := typeNameFn.NewBlock("entry")
+    strPtr := cg.genStringConstantPtr("String")
+    block.NewRet(strPtr)
+}
+
+
+
+func (cg *CodeGenerator) defineStringCopy() {
+    copyFn := cg.module.NewFunc(
+        "String_copy",
+        cg.stringType,
+        ir.NewParam("self", cg.stringType),
+    )
+    entry := copyFn.NewBlock("entry")
+
+    mallocFn := findFuncByName(cg.module, "malloc")
+    size := constant.NewInt(types.I64, cg.typeSize(cg.stringStruct))
+    newStrRaw := entry.NewCall(mallocFn, size)
+    newStr := entry.NewBitCast(newStrRaw, cg.stringType)
+
+    vtGlobal := cg.dispatchTables["String"]
+    vtPtr := entry.NewBitCast(vtGlobal, types.NewPointer(types.I8))
+    vtableField := entry.NewGetElementPtr(
+        cg.stringStruct,
+        newStr,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    entry.NewStore(vtPtr, vtableField)
+    dataPtrOrig := entry.NewGetElementPtr(
+        cg.stringStruct,
+        copyFn.Params[0],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    origData := entry.NewLoad(types.NewPointer(types.I8), dataPtrOrig)
+    dataPtrNew := entry.NewGetElementPtr(
+        cg.stringStruct,
+        newStr,
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 0),
+    )
+    entry.NewStore(origData, dataPtrNew)
+
+    entry.NewRet(newStr)
 }
