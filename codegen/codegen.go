@@ -265,8 +265,11 @@ func CodegenProgram(prog *parser.Program) *ir.Module {
         )
         cg.currentBlock.NewStore(vtPtr, vtableField)
         entryFn = fn
-        cg.currentBlock.NewCall(entryFn, mainObj)
+        //cg.currentBlock.NewCall(entryFn, mainObj)
+        objectMainObj := cg.currentBlock.NewBitCast(mainObj, cg.getClassPtrType("Object"))
+        cg.currentBlock.NewCall(entryFn, objectMainObj)
     }
+
     cg.currentBlock.NewRet(constant.NewInt(types.I32, 0))
     return cg.module
 }
@@ -662,7 +665,7 @@ func (cg *CodeGenerator) declareMethod(className string, method *parser.Method) 
         }
     }
 
-    selfParam := ir.NewParam("self", cg.getClassPtrType(className))
+    selfParam := ir.NewParam("self", cg.getClassPtrType("Object"))
     params := []*ir.Param{selfParam}
     for _, f := range method.Formals {
         var ptype types.Type
@@ -1976,19 +1979,26 @@ func (cg *CodeGenerator) defineStringCopy() {
 
 
 func (cg *CodeGenerator) defineIntBuiltins() {
+    // Change parameter type from Int* to Object* for vtable compatibility
     copyFn := cg.module.NewFunc(
         "Int_copy",
         cg.getClassPtrType("Int"),
-        ir.NewParam("self", cg.getClassPtrType("Int")),
+        ir.NewParam("self", cg.getClassPtrType("Object")), // Changed from Int to Object
     )
     entry := copyFn.NewBlock("entry")
+    
+    // Cast Object* to Int* at the beginning
+    intSelf := entry.NewBitCast(copyFn.Params[0], cg.getClassPtrType("Int"))
+    
     mallocFn := findFuncByName(cg.module, "malloc")
     size := constant.NewInt(types.I64, cg.typeSize(cg.intStruct))
     rawPtr := entry.NewCall(mallocFn, size)
     newInt := entry.NewBitCast(rawPtr, cg.getClassPtrType("Int"))
+    
+    // Use the casted intSelf for further operations
     vtPtr := entry.NewGetElementPtr(
         cg.intStruct,
-        copyFn.Params[0],
+        intSelf, // Use casted value
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 0),
     )
@@ -2000,9 +2010,10 @@ func (cg *CodeGenerator) defineIntBuiltins() {
         constant.NewInt(types.I32, 0),
     )
     entry.NewStore(vtVal, newVtPtr)
+    
     valPtr := entry.NewGetElementPtr(
         cg.intStruct,
-        copyFn.Params[0],
+        intSelf, // Use casted value
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 1),
     )
