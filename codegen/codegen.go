@@ -853,21 +853,22 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             if idx, found := cg.attributeIndices[key]; found {
                 selfAlloca := cg.variableEnv["self"]
                 selfVal := cg.currentBlock.NewLoad(selfAlloca.ElemType, selfAlloca)
+                casted := cg.currentBlock.NewBitCast(selfVal, cg.getClassPtrType(cg.currentClass))
                 fieldPtr := cg.currentBlock.NewGetElementPtr(
-                    val.Type(),
-                    selfVal,
+                    cg.classTypes[cg.currentClass], 
+                    casted,
+                    constant.NewInt(types.I32, 0),
                     constant.NewInt(types.I32, int64(idx)),
                 )
                 cg.currentBlock.NewStore(val, fieldPtr)
                 return val
             }
         }
-
+    
         alloca := cg.currentBlock.NewAlloca(val.Type())
         cg.variableEnv[lhsName] = alloca
         cg.currentBlock.NewStore(val, alloca)
         return val
-
     case *parser.Block:
         var last value.Value = constant.NewNull(types.NewPointer(types.I8))
         for _, expr := range n.Exprs {
