@@ -1,0 +1,197 @@
+class Node {
+    value : Int;
+    next  : Node;
+
+    get_value() : Int {
+        value
+    };
+
+    set_value(v : Int) : Node {
+        {
+            value <- v;
+            self;
+        }
+    };
+
+    get_next() : Node {
+        next
+    };
+
+    set_next(n : Node) : Node {
+        {
+            next <- n;
+            self;
+        }
+    };
+
+    init_node() : Node {
+        {
+            value <- 0;
+            next <- self;  -- Sentinel points to itself
+            self;
+        }
+    };
+};
+
+
+
+class LinkedList inherits IO {
+    head : Node;
+
+    init_list() : LinkedList {
+        {
+            head <- new Node;
+            head.init_node();
+            self;
+        }
+    };
+
+    insert(val : Int) : LinkedList {
+        let new_node : Node <- new Node in {
+            new_node.set_value(val);
+            new_node.set_next(head.get_next());
+            head.set_next(new_node);
+            self;
+        }
+    };
+
+    print() : LinkedList {
+        let temp : Node <- head.get_next() in {
+            while not (temp = head) loop {
+                out_int(temp.get_value());
+                out_string(" ");
+                temp <- temp.get_next();
+            } pool;
+            out_string("\n");
+            self;
+        }
+    };
+
+    search(val : Int) : Bool {
+        let temp : Node <- head.get_next() in {
+            let found : Bool <- false in {
+                while not (temp = head) loop {
+                    if temp.get_value() = val then {
+                        found <- true;
+                        temp <- head;  -- break the loop
+                    } else {
+                        temp <- temp.get_next();
+                    } fi;
+                } pool;
+                found
+            }
+        }
+    };
+};
+
+
+
+class Graph {
+    adjacency : Array;  -- Will hold LinkedList objects
+    visited   : Array;  -- Will hold Bool values
+    n         : Int;    -- Number of vertices
+
+    init_graph(num_vertices : Int) : Graph {
+        {
+            -- Store number of vertices
+            n <- num_vertices;
+
+            -- Create adjacency list array
+            adjacency <- Array[LinkedList];
+            adjacency.resize(n);
+
+            -- Initialize each entry of adjacency with an empty LinkedList
+            let i : Int <- 0 in {
+                while i < n loop {
+                    adjacency.set(i, new LinkedList);
+                    adjacency.get(i).init_list();
+                    i <- i + 1;
+                } pool;
+            };
+
+            -- Create visited array
+            visited <- Array[Bool];
+            visited.resize(n);
+
+            -- Set all visited values to false
+            i <- 0;
+            while i < n loop {
+                visited.set(i, false);
+                i <- i + 1;
+            } pool;
+
+            self;
+        }
+    };
+
+    -- Adds a directed edge u -> v.
+    add_edge(u : Int, v : Int) : Graph {
+        {
+            adjacency.get(u).insert(v);
+            self;
+        }
+    };
+
+    -- Public DFS call starting from node 'start'
+    dfs(start : Int) : Graph {
+        {
+            dfs_visit(start);
+            self;
+        }
+    };
+
+    -- Recursive DFS visit (you can also write it iteratively)
+    dfs_visit(u : Int) : Object {
+        if visited.get(u) = false then {
+            -- Mark current node as visited
+            visited.set(u, true);
+
+            -- Print the visited node (or do other processing)
+            (new IO).out_string("Visited node: ");
+            (new IO).out_int(u);
+            (new IO).out_string("\n");
+
+            -- Get adjacency list of node u
+            let neighbors : LinkedList <- adjacency.get(u) in {
+                let temp : Node <- neighbors.head.get_next() in {
+                    -- Explore each neighbor that is not visited
+                    while not (temp = neighbors.head) loop {
+                        let v : Int <- temp.get_value() in {
+                            if visited.get(v) = false then {
+                                dfs_visit(v);
+                            } fi;
+                            temp <- temp.get_next();
+                        }
+                    } pool;
+                }
+            };
+        } fi;
+        -- Return something to satisfy type checking
+        self
+    };
+};
+
+
+
+class Main inherits IO {
+    main() : Object {
+        {
+            -- Create a graph of 5 nodes
+            let g : Graph <- new Graph in {
+                g.init_graph(5);
+
+                -- Add edges (directed for simplicity)
+                g.add_edge(0, 1);
+                g.add_edge(0, 2);
+                g.add_edge(1, 3);
+                g.add_edge(2, 4);
+                g.add_edge(3, 4);
+
+                out_string("Starting DFS from node 0:\n");
+                g.dfs(0);
+
+                self;
+            }
+        }
+    };
+};

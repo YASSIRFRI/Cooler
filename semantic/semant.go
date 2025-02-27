@@ -64,6 +64,7 @@ type SemanticAnalyzer struct {
 	global   *SymbolTable
 	errors   []string
 	parentOf map[string]string // Maps className -> parentName, for inheritance
+	arrayElementTypes map[string]string // Maps array variable → element type
 }
 
 func NewSemanticAnalyzer() *SemanticAnalyzer {
@@ -71,10 +72,9 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 		global:   NewSymbolTable(nil),
 		errors:   []string{},
 		parentOf: make(map[string]string),
+		arrayElementTypes: make(map[string]string),
 	}
 
-	// 1) Create builtin classes.
-	// In COOL the basic classes all exist in the system.
 	builtins := []string{"Object", "Int", "Bool", "String", "IO", "Array"}
 	for _, b := range builtins {
 		_ = sa.global.Add(b, &SymbolEntry{
@@ -96,11 +96,6 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 	return sa
 }
 
-// --------------------------------------------------------
-//
-//	OBJECT METHODS INTEGRATION
-//
-// --------------------------------------------------------
 func (sa *SemanticAnalyzer) addObjectMethods() {
 	methods := []struct {
 		fullName   string
@@ -145,11 +140,7 @@ func (sa *SemanticAnalyzer) addObjectMethods() {
 	}
 }
 
-// --------------------------------------------------------
-//
-//	IO METHODS INTEGRATION
-//
-// --------------------------------------------------------
+
 func (sa *SemanticAnalyzer) addIOMethods() {
 	methods := []struct {
 		fullName   string
@@ -201,11 +192,7 @@ func (sa *SemanticAnalyzer) addIOMethods() {
 	}
 }
 
-// --------------------------------------------------------
-//
-//	STRING METHODS INTEGRATION
-//
-// --------------------------------------------------------
+
 func (sa *SemanticAnalyzer) addStringMethods() {
 	// Built-in: length() : Int, concat(String) : String, substr(Int, Int) : String
 	methods := []struct {
@@ -271,14 +258,7 @@ func (sa *SemanticAnalyzer) Analyze(program *parser.Program) {
 	sa.typeCheck(program)
 }
 
-// --------------------------------------------------------
-//  1. BUILD CLASS SYMBOLS
-//
-// --------------------------------------------------------
-// To avoid ordering issues we do two passes:
-//
-//	(a) register all classes (by name) in the global table,
-//	(b) then set up inheritance (and check that parent names exist).
+
 func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 	// First pass: register all classes.
 	for _, classNode := range prog.Classes {
@@ -326,22 +306,14 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 	}
 }
 
-// --------------------------------------------------------
-//  2. BUILD FEATURES
-//
-// --------------------------------------------------------
-// Register each class’s attributes and methods in a first pass so that
-// later method calls (even from subclasses) can find inherited methods.
+
 func (sa *SemanticAnalyzer) buildFeatures(prog *parser.Program) {
 	for _, classNode := range prog.Classes {
-		// If the class was not successfully registered, skip processing its features.
 		_, ok := sa.global.Lookup(classNode.Name)
 		if !ok {
 			continue
 		}
-		// We use a temporary scope here (its only effect is to register methods globally).
 		classScope := NewSymbolTable(sa.global)
-
 		for _, feat := range classNode.Features {
 			switch f := feat.(type) {
 			case *parser.Attribute:
@@ -434,12 +406,7 @@ func (sa *SemanticAnalyzer) registerMethod(className string, method *parser.Meth
 	}
 }
 
-// --------------------------------------------------------
-//  3. TYPE CHECK
-//
-// --------------------------------------------------------
-// When type–checking a class we build a symbol table that not only
-// contains the class’s own features but also those inherited from its ancestors.
+
 func (sa *SemanticAnalyzer) typeCheck(prog *parser.Program) {
 	// Build a map from class name to class AST node.
 	classesByName := make(map[string]*parser.Class)
@@ -533,11 +500,6 @@ func (sa *SemanticAnalyzer) typeCheckMethod(m *parser.Method, classScope *Symbol
 	}
 }
 
-// --------------------------------------------------------
-//
-//	getExprType
-//
-// --------------------------------------------------------
 func (sa *SemanticAnalyzer) getExprType(expr parser.Node, scope *SymbolTable, currentClass string) string {
 	switch e := expr.(type) {
 	case *parser.IntConst:
