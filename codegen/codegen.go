@@ -330,9 +330,7 @@ func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
         },
     }
     
-    // Create vtables with consistent typing
     for className, entries := range vtableEntries {
-        // Create array type with the common method pointer type
         arrayType := types.NewArray(uint64(len(entries)), commonMethodPtrType)
         elements := make([]constant.Constant, len(entries))
         
@@ -340,19 +338,18 @@ func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
             fnName := fmt.Sprintf("%s_%s", entry.Class, entry.Method)
             fn := findFuncByName(cg.module, fnName)
             if fn != nil {
-                // Cast each function to the common method pointer type
                 elements[i] = constant.NewBitCast(fn, commonMethodPtrType)
             } else {
                 elements[i] = constant.NewNull(commonMethodPtrType)
             }
         }
         
-        // Create array constant and global variable
-        arrayInit := constant.NewArray(arrayType, elements...)
-        vtableGlobal := cg.module.NewGlobalDef(fmt.Sprintf("vtable_%s", className), arrayInit)
+        vtableGlobal := cg.module.NewGlobalDef(
+            fmt.Sprintf("vtable_%s", className), 
+            constant.NewArray(arrayType, elements...)
+        )
         cg.dispatchTables[className] = vtableGlobal
         
-        // Save method indices for dispatch
         for i, entry := range entries {
             key := fmt.Sprintf("%s.%s", className, entry.Method)
             cg.methodIndices[key] = i
