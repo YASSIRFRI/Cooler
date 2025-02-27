@@ -281,53 +281,85 @@ func findFuncByName(mod *ir.Module, name string) *ir.Func {
 }
 
 func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
-    cg.createVTableGlobal("Object", []DispatchEntry{
-        {Class: "Object", Method: "abort"},
-        {Class: "Object", Method: "type_name"},
-        {Class: "Object", Method: "copy"},
-    })
-    cg.createVTableGlobal("Int", []DispatchEntry{
-        {Class: "Object", Method: "abort"},
-        {Class: "Int", Method: "type_name"},
-        {Class: "Int", Method: "copy"},
-    })
-    cg.createVTableGlobal("String", []DispatchEntry{
-        {Class: "Object", Method: "abort"},
-        {Class: "String", Method: "type_name"},
-        {Class: "String", Method: "copy"},
-    })
-    cg.createVTableGlobal("Bool", []DispatchEntry{
-        {Class: "Object", Method: "abort"},
-        {Class: "Object", Method: "type_name"},
-        {Class: "Bool", Method: "copy"},
-    })
-    cg.createVTableGlobal("IO", []DispatchEntry{
-        {Class: "Object", Method: "abort"},
-        {Class: "Object", Method: "type_name"},
-        {Class: "Object", Method: "copy"},
-        {Class: "IO", Method: "out_string"},
-        {Class: "IO", Method: "out_int"},
-        {Class: "IO", Method: "in_string"},
-        {Class: "IO", Method: "in_int"},
-    })
-
-    cg.createVTableGlobal("Array", []DispatchEntry{
-        {Class: "Object", Method: "abort"},
-        {Class: "Object", Method: "type_name"},
-        {Class: "Object", Method: "copy"},
-        {Class: "Array", Method: "length"},
-        {Class: "Array", Method: "get"},
-        {Class: "Array", Method: "set"},
-        {Class: "Array", Method: "resize"},
-    })
-
-
+    commonFuncType := types.NewFunc(
+        cg.getClassPtrType("Object"),
+        cg.getClassPtrType("Object"), 
+    )
+    commonMethodPtrType := types.NewPointer(commonFuncType)
+    vtableEntries := map[string][]DispatchEntry{
+        "Object": {
+            {Class: "Object", Method: "abort"},
+            {Class: "Object", Method: "type_name"},
+            {Class: "Object", Method: "copy"},
+        },
+        "Int": {
+            {Class: "Object", Method: "abort"},
+            {Class: "Int", Method: "type_name"},
+            {Class: "Int", Method: "copy"},
+        },
+        "String": {
+            {Class: "Object", Method: "abort"},
+            {Class: "String", Method: "type_name"},
+            {Class: "String", Method: "copy"},
+        },
+        "Bool": {
+            {Class: "Object", Method: "abort"},
+            {Class: "Object", Method: "type_name"},
+            {Class: "Bool", Method: "copy"},
+        },
+        "IO": {
+            {Class: "Object", Method: "abort"},
+            {Class: "Object", Method: "type_name"},
+            {Class: "Object", Method: "copy"},
+            {Class: "IO", Method: "out_string"},
+            {Class: "IO", Method: "out_int"},
+            {Class: "IO", Method: "in_string"},
+            {Class: "IO", Method: "in_int"},
+        },
+        "Array": {
+            {Class: "Object", Method: "abort"},
+            {Class: "Object", Method: "type_name"},
+            {Class: "Object", Method: "copy"},
+            {Class: "Array", Method: "length"},
+            {Class: "Array", Method: "get"},
+            {Class: "Array", Method: "set"},
+            {Class: "Array", Method: "resize"},
+        },
+    }
+    
+    // Create vtables with consistent typing
+    for className, entries := range vtableEntries {
+        // Create array type with the common method pointer type
+        arrayType := types.NewArray(uint64(len(entries)), commonMethodPtrType)
+        elements := make([]constant.Constant, len(entries))
+        
+        for i, entry := range entries {
+            fnName := fmt.Sprintf("%s_%s", entry.Class, entry.Method)
+            fn := findFuncByName(cg.module, fnName)
+            if fn != nil {
+                // Cast each function to the common method pointer type
+                elements[i] = constant.NewBitCast(fn, commonMethodPtrType)
+            } else {
+                elements[i] = constant.NewNull(commonMethodPtrType)
+            }
+        }
+        
+        // Create array constant and global variable
+        arrayInit := constant.NewArray(arrayType, elements...)
+        vtableGlobal := cg.module.NewGlobalDef(fmt.Sprintf("vtable_%s", className), arrayInit)
+        cg.dispatchTables[className] = vtableGlobal
+        
+        // Save method indices for dispatch
+        for i, entry := range entries {
+            key := fmt.Sprintf("%s.%s", className, entry.Method)
+            cg.methodIndices[key] = i
+        }
+    }
 }
-
 func (cg *CodeGenerator) createVTableGlobal(className string, layout []DispatchEntry) {
     commonMethodPtrType := types.NewPointer(types.NewFunc(
-        cg.getClassPtrType("Object"), // return type
-        cg.getClassPtrType("Object"), // param #1 = self
+        cg.getClassPtrType("Object"),
+        cg.getClassPtrType("Object"),
     ))
     arrType := types.NewArray(uint64(len(layout)), commonMethodPtrType)
     elems := make([]constant.Constant, len(layout))
