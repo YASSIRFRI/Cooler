@@ -14,9 +14,9 @@
 @fmt_str_in_2 = constant [7 x i8] c"%1023s\00"
 @fmt_int_in_3 = constant [3 x i8] c"%d\00"
 @str_0 = global [7 x i8] c"String\00"
-@str_obj_1 = constant { i8* } { [7 x i8]* getelementptr inbounds ([7 x i8], [7 x i8]* @str_0) }
+@str_obj_1 = constant { i8* } { i8* getelementptr inbounds ([7 x i8], [7 x i8]* @str_0, i32 0, i32 0) }
 @str_2 = global [7 x i8] c"Object\00"
-@str_obj_3 = constant { i8* } { [7 x i8]* getelementptr inbounds ([7 x i8], [7 x i8]* @str_2) }
+@str_obj_3 = constant { i8* } { i8* getelementptr inbounds ([7 x i8], [7 x i8]* @str_2, i32 0, i32 0) }
 @vtable_Object = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_copy to %ObjectStruct* (%ObjectStruct*)*)]
 @vtable_Int = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* null, %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%IntStruct*)* @Int_copy to %ObjectStruct* (%ObjectStruct*)*)]
 @vtable_String = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%StringStruct*)* @String_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* null]
@@ -28,23 +28,23 @@
 @vtable_Set = constant [4 x i8*] [i8* bitcast (%Set_struct* (%Set_struct*)* @Set_init_set to i8*), i8* bitcast (%Set_struct* (%Set_struct*, %IntStruct*)* @Set_insert to i8*), i8* bitcast (%BoolStruct* (%Set_struct*, %IntStruct*)* @Set_has to i8*), i8* bitcast (%Set_struct* (%Set_struct*)* @Set_print_set to i8*)]
 @vtable_Main = constant [1 x i8*] [i8* bitcast (%ObjectStruct* (%Main_struct*)* @Main_main to i8*)]
 @str_4 = global [2 x i8] c" \00"
-@str_obj_5 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_4) }
+@str_obj_5 = constant { i8* } { i8* getelementptr inbounds ([2 x i8], [2 x i8]* @str_4, i32 0, i32 0) }
 @str_6 = global [2 x i8] c"\0A\00"
-@str_obj_7 = constant { i8* } { [2 x i8]* getelementptr inbounds ([2 x i8], [2 x i8]* @str_6) }
+@str_obj_7 = constant { i8* } { i8* getelementptr inbounds ([2 x i8], [2 x i8]* @str_6, i32 0, i32 0) }
 @str_8 = global [23 x i8] c"Current set contents:\0A\00"
-@str_obj_9 = constant { i8* } { [23 x i8]* getelementptr inbounds ([23 x i8], [23 x i8]* @str_8) }
+@str_obj_9 = constant { i8* } { i8* getelementptr inbounds ([23 x i8], [23 x i8]* @str_8, i32 0, i32 0) }
 @str_10 = global [27 x i8] c"Check if 2 is in the set: \00"
-@str_obj_11 = constant { i8* } { [27 x i8]* getelementptr inbounds ([27 x i8], [27 x i8]* @str_10) }
+@str_obj_11 = constant { i8* } { i8* getelementptr inbounds ([27 x i8], [27 x i8]* @str_10, i32 0, i32 0) }
 @str_12 = global [5 x i8] c"Yes\0A\00"
-@str_obj_13 = constant { i8* } { [5 x i8]* getelementptr inbounds ([5 x i8], [5 x i8]* @str_12) }
+@str_obj_13 = constant { i8* } { i8* getelementptr inbounds ([5 x i8], [5 x i8]* @str_12, i32 0, i32 0) }
 @str_14 = global [4 x i8] c"No\0A\00"
-@str_obj_15 = constant { i8* } { [4 x i8]* getelementptr inbounds ([4 x i8], [4 x i8]* @str_14) }
+@str_obj_15 = constant { i8* } { i8* getelementptr inbounds ([4 x i8], [4 x i8]* @str_14, i32 0, i32 0) }
 @str_16 = global [28 x i8] c"Check if 99 is in the set: \00"
-@str_obj_17 = constant { i8* } { [28 x i8]* getelementptr inbounds ([28 x i8], [28 x i8]* @str_16) }
+@str_obj_17 = constant { i8* } { i8* getelementptr inbounds ([28 x i8], [28 x i8]* @str_16, i32 0, i32 0) }
 @str_18 = global [5 x i8] c"Yes\0A\00"
-@str_obj_19 = constant { i8* } { [5 x i8]* getelementptr inbounds ([5 x i8], [5 x i8]* @str_18) }
+@str_obj_19 = constant { i8* } { i8* getelementptr inbounds ([5 x i8], [5 x i8]* @str_18, i32 0, i32 0) }
 @str_20 = global [4 x i8] c"No\0A\00"
-@str_obj_21 = constant { i8* } { [4 x i8]* getelementptr inbounds ([4 x i8], [4 x i8]* @str_20) }
+@str_obj_21 = constant { i8* } { i8* getelementptr inbounds ([4 x i8], [4 x i8]* @str_20, i32 0, i32 0) }
 
 declare i8* @malloc(i64 %size)
 

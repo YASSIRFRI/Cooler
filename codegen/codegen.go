@@ -1424,25 +1424,29 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
 }
 
 func (cg *CodeGenerator) genStringConstantPtr(strVal string) value.Value {
-     strVal = strings.ReplaceAll(strVal, "\\n", "\n")
-     if !strings.HasSuffix(strVal, "\x00") {
-         strVal += "\x00"
-     }
-     arr := constant.NewCharArrayFromString(strVal)
-     arrayName := fmt.Sprintf("str_%d", cg.stringCounter*2)
-     g := cg.module.NewGlobalDef(arrayName, arr)
-     gep := constant.NewGetElementPtr(g.Init.Type(), g)
-     gep.InBounds = true
-     strStruct := types.NewStruct(types.NewPointer(types.I8))
-     init := constant.NewStruct(strStruct, gep)
-     objName := fmt.Sprintf("str_obj_%d", cg.stringCounter*2+1)
-     globStrObj := cg.module.NewGlobalDef(objName, init)
-     globStrObj.Immutable = true
-     ptr := constant.NewBitCast(globStrObj, cg.stringType)
-     cg.stringCounter++
-     return ptr
- }
-
+    strVal = strings.ReplaceAll(strVal, "\\n", "\n")
+    if !strings.HasSuffix(strVal, "\x00") {
+        strVal += "\x00"
+    }
+    arr := constant.NewCharArrayFromString(strVal)
+    arrayName := fmt.Sprintf("str_%d", cg.stringCounter*2)
+    g := cg.module.NewGlobalDef(arrayName, arr)
+    
+    // Create a proper i8* pointer by using explicit indices
+    zero := constant.NewInt(types.I32, 0)
+    indices := []constant.Constant{zero, zero}
+    gep := constant.NewGetElementPtr(g.Init.Type(), g, indices...)
+    gep.InBounds = true
+    
+    strStruct := types.NewStruct(types.NewPointer(types.I8))
+    init := constant.NewStruct(strStruct, gep)
+    objName := fmt.Sprintf("str_obj_%d", cg.stringCounter*2+1)
+    globStrObj := cg.module.NewGlobalDef(objName, init)
+    globStrObj.Immutable = true
+    ptr := constant.NewBitCast(globStrObj, cg.stringType)
+    cg.stringCounter++
+    return ptr
+}
 
 
 
