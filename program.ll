@@ -4,9 +4,6 @@
 %StringStruct = type { i8*, i8* }
 %IOStruct = type { i8* }
 %ArrayStruct = type { i8*, i64, i8* }
-%Shape_struct = type { i8* }
-%Circle_struct = type { i8* }
-%Square_struct = type { i8* }
 %Main_struct = type { i8* }
 
 @fmt_str_0 = constant [3 x i8] c"%s\00"
@@ -23,22 +20,9 @@
 @vtable_Bool = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* null]
 @vtable_IO = global [7 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_copy to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IOStruct* (%IOStruct*, %StringStruct*)* @IO_out_string to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IOStruct* (%IOStruct*, %IntStruct*)* @IO_out_int to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%IOStruct*)* @IO_in_string to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%IOStruct*)* @IO_in_int to %ObjectStruct* (%ObjectStruct*)*)]
 @vtable_Array = global [7 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_copy to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%ObjectStruct*)* @Array_length to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (i8* (%ObjectStruct*, i64)* @Array_get to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (void (%ObjectStruct*, i64, i8*)* @Array_set to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ArrayStruct* (%ObjectStruct*, i64)* @Array_resize to %ObjectStruct* (%ObjectStruct*)*)]
-@vtable_Shape = constant [1 x i8*] [i8* bitcast (%StringStruct* (%Shape_struct*)* @Shape_draw to i8*)]
-@vtable_Circle = constant [1 x i8*] [i8* bitcast (%StringStruct* (%Circle_struct*)* @Circle_draw to i8*)]
-@vtable_Square = constant [1 x i8*] [i8* bitcast (%StringStruct* (%Square_struct*)* @Square_draw to i8*)]
 @vtable_Main = constant [1 x i8*] [i8* bitcast (%ObjectStruct* (%Main_struct*)* @Main_main to i8*)]
-@str_4 = global [14 x i8] c"Generic Shape\00"
-@str_obj_5 = constant { i8* } { i8* getelementptr inbounds ([14 x i8], [14 x i8]* @str_4, i32 0, i32 0) }
-@str_6 = global [7 x i8] c"Circle\00"
-@str_obj_7 = constant { i8* } { i8* getelementptr inbounds ([7 x i8], [7 x i8]* @str_6, i32 0, i32 0) }
-@str_8 = global [7 x i8] c"Square\00"
-@str_obj_9 = constant { i8* } { i8* getelementptr inbounds ([7 x i8], [7 x i8]* @str_8, i32 0, i32 0) }
-@str_10 = global [16 x i8] c"It's a circle.\0A\00"
-@str_obj_11 = constant { i8* } { i8* getelementptr inbounds ([16 x i8], [16 x i8]* @str_10, i32 0, i32 0) }
-@str_12 = global [16 x i8] c"It's a square.\0A\00"
-@str_obj_13 = constant { i8* } { i8* getelementptr inbounds ([16 x i8], [16 x i8]* @str_12, i32 0, i32 0) }
-@str_14 = global [26 x i8] c"It's some kind of shape.\0A\00"
-@str_obj_15 = constant { i8* } { i8* getelementptr inbounds ([26 x i8], [26 x i8]* @str_14, i32 0, i32 0) }
+@str_4 = global [2 x i8] c"\0A\00"
+@str_obj_5 = constant { i8* } { i8* getelementptr inbounds ([2 x i8], [2 x i8]* @str_4, i32 0, i32 0) }
 
 declare i8* @malloc(i64 %size)
 
@@ -309,39 +293,6 @@ entry:
 	ret i32 0
 }
 
-define %StringStruct* @Shape_draw(%Shape_struct* %self) {
-entry:
-	%0 = alloca %Shape_struct*
-	store %Shape_struct* %self, %Shape_struct** %0
-	%1 = load %Shape_struct*, %Shape_struct** %0
-	%2 = bitcast %Shape_struct* %1 to %Shape_struct*
-	%3 = alloca %Shape_struct*
-	store %Shape_struct* %2, %Shape_struct** %3
-	ret %StringStruct* bitcast ({ i8* }* @str_obj_5 to %StringStruct*)
-}
-
-define %StringStruct* @Circle_draw(%Circle_struct* %self) {
-entry:
-	%0 = alloca %Circle_struct*
-	store %Circle_struct* %self, %Circle_struct** %0
-	%1 = load %Circle_struct*, %Circle_struct** %0
-	%2 = bitcast %Circle_struct* %1 to %Circle_struct*
-	%3 = alloca %Circle_struct*
-	store %Circle_struct* %2, %Circle_struct** %3
-	ret %StringStruct* bitcast ({ i8* }* @str_obj_7 to %StringStruct*)
-}
-
-define %StringStruct* @Square_draw(%Square_struct* %self) {
-entry:
-	%0 = alloca %Square_struct*
-	store %Square_struct* %self, %Square_struct** %0
-	%1 = load %Square_struct*, %Square_struct** %0
-	%2 = bitcast %Square_struct* %1 to %Square_struct*
-	%3 = alloca %Square_struct*
-	store %Square_struct* %2, %Square_struct** %3
-	ret %StringStruct* bitcast ({ i8* }* @str_obj_9 to %StringStruct*)
-}
-
 define %ObjectStruct* @Main_main(%Main_struct* %self) {
 entry:
 	%0 = alloca %Main_struct*
@@ -350,79 +301,43 @@ entry:
 	%2 = bitcast %Main_struct* %1 to %Main_struct*
 	%3 = alloca %Main_struct*
 	store %Main_struct* %2, %Main_struct** %3
-	%4 = alloca %Shape_struct*
-	%5 = call i8* @malloc(i64 8)
-	%6 = bitcast i8* %5 to %Circle_struct*
-	%7 = getelementptr %Circle_struct, %Circle_struct* %6, i32 0, i32 0
-	store i8* bitcast ([1 x i8*]* bitcast ([1 x i8*]* @vtable_Circle to [1 x i8*]*) to i8*), i8** %7
-	%8 = bitcast %Circle_struct* %6 to %Shape_struct*
-	store %Shape_struct* %8, %Shape_struct** %4
-	%9 = load %Shape_struct*, %Shape_struct** %4
-	%10 = bitcast %Shape_struct* %9 to %ObjectStruct*
-	%11 = getelementptr %ObjectStruct, %ObjectStruct* %10, i32 0, i32 0
-	%12 = load i8*, i8** %11
-	%13 = icmp eq i8* %12, bitcast ([1 x i8*]* @vtable_Circle to i8*)
-	br i1 %13, label %case_branch_1, label %case_test_2
-
-case_exit_0:
-	%14 = phi %ObjectStruct* [ %26, %case_branch_1 ], [ %35, %case_branch_3 ], [ %44, %case_branch_5 ]
-	%15 = call i8* @malloc(i64 16)
-	%16 = bitcast i8* %15 to %IntStruct*
-	%17 = getelementptr %IntStruct, %IntStruct* %16, i32 0, i32 1
-	store i32 0, i32* %17
-	%18 = bitcast %IntStruct* %16 to %ObjectStruct*
-	ret %ObjectStruct* %18
-
-case_branch_1:
-	%19 = bitcast %Shape_struct* %9 to %Circle_struct*
-	%20 = alloca %Circle_struct*
-	store %Circle_struct* %19, %Circle_struct** %20
-	%21 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_11 to %StringStruct*), i32 0, i32 0
-	%22 = load i8*, i8** %21
-	%23 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%24 = call i32 (i8*, ...) @printf(i8* %23, i8* %22)
-	%25 = load %Main_struct*, %Main_struct** %3
-	%26 = bitcast %Main_struct* %25 to %ObjectStruct*
-	br label %case_exit_0
-
-case_test_2:
-	%27 = icmp eq i8* %12, bitcast ([1 x i8*]* @vtable_Square to i8*)
-	br i1 %27, label %case_branch_3, label %case_test_4
-
-case_branch_3:
-	%28 = bitcast %Shape_struct* %9 to %Square_struct*
-	%29 = alloca %Square_struct*
-	store %Square_struct* %28, %Square_struct** %29
-	%30 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_13 to %StringStruct*), i32 0, i32 0
-	%31 = load i8*, i8** %30
-	%32 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%33 = call i32 (i8*, ...) @printf(i8* %32, i8* %31)
-	%34 = load %Main_struct*, %Main_struct** %3
-	%35 = bitcast %Main_struct* %34 to %ObjectStruct*
-	br label %case_exit_0
-
-case_test_4:
-	%36 = icmp eq i8* %12, bitcast ([1 x i8*]* @vtable_Shape to i8*)
-	br i1 %36, label %case_branch_5, label %case_test_6
-
-case_branch_5:
-	%37 = bitcast %Shape_struct* %9 to %Shape_struct*
-	%38 = alloca %Shape_struct*
-	store %Shape_struct* %37, %Shape_struct** %38
-	%39 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_15 to %StringStruct*), i32 0, i32 0
-	%40 = load i8*, i8** %39
-	%41 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
-	%42 = call i32 (i8*, ...) @printf(i8* %41, i8* %40)
-	%43 = load %Main_struct*, %Main_struct** %3
-	%44 = bitcast %Main_struct* %43 to %ObjectStruct*
-	br label %case_exit_0
-
-case_test_6:
-	br label %case_error_7
-
-case_error_7:
-	%45 = call %ObjectStruct* @Object_abort(%ObjectStruct* %10)
-	unreachable
+	%4 = alloca %IntStruct*
+	%5 = bitcast %IntStruct** null to %IntStruct*
+	store %IntStruct* %5, %IntStruct** %4
+	%6 = alloca %IntStruct*
+	%7 = bitcast %IntStruct** null to %IntStruct*
+	store %IntStruct* %7, %IntStruct** %6
+	%8 = call i8* @malloc(i64 16)
+	%9 = bitcast i8* %8 to %IntStruct*
+	%10 = getelementptr %IntStruct, %IntStruct* %9, i32 0, i32 1
+	store i32 1, i32* %10
+	store %IntStruct* %9, %IntStruct** %4
+	%11 = load %IntStruct*, %IntStruct** %4
+	%12 = bitcast %IntStruct* %11 to %ObjectStruct*
+	%13 = call %IntStruct* @Int_copy(%ObjectStruct* %12)
+	store %IntStruct* %13, %IntStruct** %6
+	%14 = load %IntStruct*, %IntStruct** %6
+	%15 = getelementptr %IntStruct, %IntStruct* %14, i32 0, i32 1
+	%16 = load i32, i32* %15
+	%17 = getelementptr [3 x i8], [3 x i8]* @fmt_int_1, i32 0, i32 0
+	%18 = call i32 (i8*, ...) @printf(i8* %17, i32 %16)
+	%19 = load %Main_struct*, %Main_struct** %3
+	%20 = getelementptr %StringStruct, %StringStruct* bitcast ({ i8* }* @str_obj_5 to %StringStruct*), i32 0, i32 0
+	%21 = load i8*, i8** %20
+	%22 = getelementptr [3 x i8], [3 x i8]* @fmt_str_0, i32 0, i32 0
+	%23 = call i32 (i8*, ...) @printf(i8* %22, i8* %21)
+	%24 = load %Main_struct*, %Main_struct** %3
+	%25 = call i8* @malloc(i64 16)
+	%26 = bitcast i8* %25 to %IntStruct*
+	%27 = getelementptr %IntStruct, %IntStruct* %26, i32 0, i32 1
+	store i32 1, i32* %27
+	%28 = getelementptr %IntStruct, %IntStruct* %26, i32 0, i32 1
+	%29 = load i32, i32* %28
+	%30 = getelementptr [3 x i8], [3 x i8]* @fmt_int_1, i32 0, i32 0
+	%31 = call i32 (i8*, ...) @printf(i8* %30, i32 %29)
+	%32 = load %Main_struct*, %Main_struct** %3
+	%33 = bitcast %Main_struct* %32 to %ObjectStruct*
+	ret %ObjectStruct* %33
 }
 
 define %StringStruct* @String_copy(%StringStruct* %self) {
