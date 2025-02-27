@@ -9,7 +9,6 @@ class Main inherits IO {
             arr.set(4, 9);
             arr.set(5, 11);
             arr.set(6, 13);
-            
             let target : Int <- 7 in {
                 let low : Int <- 0 in {
                     let high : Int <- arr.length() - 1 in {

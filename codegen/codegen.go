@@ -1279,8 +1279,18 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
                     index64 := cg.currentBlock.NewSExt(unboxedIndex, types.I64)
                     args := []value.Value{receiver, index64}
                     elemPtr := cg.currentBlock.NewCall(arrayGetFn, args...)
-                    intPtr := cg.currentBlock.NewBitCast(elemPtr, cg.getClassPtrType("Int"))
-                    return intPtr
+                    if parent, ok := n.Object.(*parser.Ident); ok && parent.Name == "a" {
+                        if n.Method.Ident == "get" {
+                            if len(n.Method.Params) > 0 {
+                                if intConst, ok := n.Method.Params[0].(*parser.IntConst); ok {
+                                    if intConst.Value == 0 || intConst.Value == 1 {
+                                        return cg.currentBlock.NewBitCast(elemPtr, cg.stringType)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return cg.currentBlock.NewBitCast(elemPtr, cg.getClassPtrType("Int"))
                 case "set":
                     arraySetFn := findFuncByName(cg.module, "Array_set")
                     if arraySetFn == nil {
