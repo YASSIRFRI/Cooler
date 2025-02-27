@@ -1718,18 +1718,18 @@ func (cg *CodeGenerator) defineIOBuiltins() {
 
 
 func (cg *CodeGenerator) defineArrayMethods() {
-
+    // Define memory operations first
     memsetName := "llvm.memset.p0i8.i64"
     memsetFn := findFuncByName(cg.module, memsetName)
     if memsetFn == nil {
         memsetFn = cg.module.NewFunc(
             memsetName,
             types.Void,
-            ir.NewParam("dest", types.NewPointer(types.I8)),    // destination
-            ir.NewParam("val", types.I8),                       // value to fill
-            ir.NewParam("len", types.I64),                      // length
-            ir.NewParam("align", types.I32),                    // alignment
-            ir.NewParam("isvolatile", types.I1),               // is volatile
+            ir.NewParam("dest", types.NewPointer(types.I8)),
+            ir.NewParam("val", types.I8),
+            ir.NewParam("len", types.I64),
+            ir.NewParam("align", types.I32),
+            ir.NewParam("isvolatile", types.I1),
         )
     }
 
@@ -1746,12 +1746,18 @@ func (cg *CodeGenerator) defineArrayMethods() {
             ir.NewParam("isvolatile", types.I1),
         )
     }
-    selfParam := ir.NewParam("self", cg.getClassPtrType("Array"))
+
+    // Array_get method
+    selfParam := ir.NewParam("self", cg.getClassPtrType("Object"))
     indexParam := ir.NewParam("index", types.I64)
     getFn := cg.module.NewFunc("Array_get", types.NewPointer(types.I8), selfParam, indexParam)
     entry := getFn.NewBlock("entry")
+    
+    // Cast Object* to Array*
+    arraySelf := entry.NewBitCast(getFn.Params[0], cg.getClassPtrType("Array"))
+    
     lenPtr := entry.NewGetElementPtr(
-        cg.arrayStruct, getFn.Params[0],
+        cg.arrayStruct, arraySelf,
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 1),
     )
@@ -1763,7 +1769,7 @@ func (cg *CodeGenerator) defineArrayMethods() {
     errorBlock.NewRet(constant.NewNull(types.NewPointer(types.I8)))
 
     dataPtrPtr := validBlock.NewGetElementPtr(
-        cg.arrayStruct, getFn.Params[0],
+        cg.arrayStruct, arraySelf,
         constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 2),
     )
     dataPtr := validBlock.NewLoad(types.NewPointer(types.I8), dataPtrPtr)
@@ -1771,14 +1777,19 @@ func (cg *CodeGenerator) defineArrayMethods() {
     elemPtr := validBlock.NewGetElementPtr(types.NewPointer(types.I8), castedDataPtr, getFn.Params[1])
     elemVal := validBlock.NewLoad(types.NewPointer(types.I8), elemPtr)
     validBlock.NewRet(elemVal)
-    selfParam = ir.NewParam("self", cg.getClassPtrType("Array"))
+
+    // Array_set method
+    selfParam = ir.NewParam("self", cg.getClassPtrType("Object"))
     indexParam = ir.NewParam("index", types.I64)
     valueParam := ir.NewParam("value", types.NewPointer(types.I8))
     setFn := cg.module.NewFunc("Array_set", types.Void, selfParam, indexParam, valueParam)
     entry = setFn.NewBlock("entry")
+    
+    // Cast Object* to Array*
+    arraySelf = entry.NewBitCast(setFn.Params[0], cg.getClassPtrType("Array"))
 
     lenPtr = entry.NewGetElementPtr(
-        cg.arrayStruct, setFn.Params[0],
+        cg.arrayStruct, arraySelf,
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 1),
     )
@@ -1788,8 +1799,9 @@ func (cg *CodeGenerator) defineArrayMethods() {
     errorBlock = setFn.NewBlock("error")
     entry.NewCondBr(inBounds, validBlock, errorBlock)
     errorBlock.NewRet(nil)
+
     dataPtrPtr = validBlock.NewGetElementPtr(
-        cg.arrayStruct, setFn.Params[0],
+        cg.arrayStruct, arraySelf,
         constant.NewInt(types.I32, 0), constant.NewInt(types.I32, 2),
     )
     dataPtr = validBlock.NewLoad(types.NewPointer(types.I8), dataPtrPtr)
@@ -1797,10 +1809,16 @@ func (cg *CodeGenerator) defineArrayMethods() {
     elemPtr = validBlock.NewGetElementPtr(types.NewPointer(types.I8), castedDataPtr, setFn.Params[1])
     validBlock.NewStore(setFn.Params[2], elemPtr)
     validBlock.NewRet(nil)
-    selfParam = ir.NewParam("self", cg.getClassPtrType("Array"))
+
+    // Array_resize method - fixed to accept ObjectStruct*
+    selfParam = ir.NewParam("self", cg.getClassPtrType("Object"))
     newSizeParam := ir.NewParam("new_size", types.I64)
     resizeFn := cg.module.NewFunc("Array_resize", cg.getClassPtrType("Array"), selfParam, newSizeParam)
     entry = resizeFn.NewBlock("entry")
+    
+    // Cast Object* to Array*
+    arraySelf = entry.NewBitCast(resizeFn.Params[0], cg.getClassPtrType("Array"))
+    
     elemSize := constant.NewInt(types.I64, 8)
     newMemSize := entry.NewMul(newSizeParam, elemSize)
     mallocFn := findFuncByName(cg.module, "malloc")
@@ -1813,13 +1831,13 @@ func (cg *CodeGenerator) defineArrayMethods() {
         constant.NewInt(types.I1, 0),
     )
     oldDataPtrPtr := entry.NewGetElementPtr(
-        cg.arrayStruct, selfParam,
+        cg.arrayStruct, arraySelf,
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 2),
     )
     oldDataPtr := entry.NewLoad(types.NewPointer(types.I8), oldDataPtrPtr)
     oldLenPtr := entry.NewGetElementPtr(
-        cg.arrayStruct, selfParam,
+        cg.arrayStruct, arraySelf,
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 1),
     )
@@ -1839,15 +1857,18 @@ func (cg *CodeGenerator) defineArrayMethods() {
     )
     entry.NewStore(newDataRaw, oldDataPtrPtr)
     entry.NewStore(newSizeParam, oldLenPtr)
-    entry.NewRet(selfParam)
-    selfParam = ir.NewParam("self", cg.getClassPtrType("Array"))
+    entry.NewRet(arraySelf)
+    
+    selfParam = ir.NewParam("self", cg.getClassPtrType("Object"))
     lengthFn := cg.module.NewFunc("Array_length", cg.getClassPtrType("Int"), selfParam)
     entry = lengthFn.NewBlock("entry")
+    arraySelf = entry.NewBitCast(lengthFn.Params[0], cg.getClassPtrType("Array"))
+    
     oldBlock := cg.currentBlock
     cg.currentBlock = entry
 
     lenPtr = entry.NewGetElementPtr(
-        cg.arrayStruct, lengthFn.Params[0],
+        cg.arrayStruct, arraySelf,
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 1),
     )
