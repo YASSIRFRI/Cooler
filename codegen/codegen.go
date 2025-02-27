@@ -1442,7 +1442,8 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
         if cg.currentClass != "" {
             if selfAlloca, ok := cg.variableEnv["self"]; ok {
                 selfVal := cg.currentBlock.NewLoad(selfAlloca.ElemType, selfAlloca)
-                args = append(args, selfVal)
+                objSelf := cg.currentBlock.NewBitCast(selfVal, cg.getClassPtrType("Object"))
+                args = append(args, objSelf)
             } else {
                 args = append(args, constant.NewNull(types.NewPointer(types.I8)))
             }
