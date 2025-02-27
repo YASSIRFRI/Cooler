@@ -4,14 +4,27 @@
 
 # Cooler: A COOL Language Compiler in Go 🚀
 
-Cooler is a no-nonsense, efficient compiler for the Classroom Object-Oriented Language (COOL) written in Go. Designed for clarity, performance, and robustness, Cooler not only supports standard language features but also includes a powerful code generation backend that leverages LLVM IR for native code generation.
+Cooler is a no-nonsense, efficient compiler for the Classroom Object-Oriented Language (COOL) written in Go. Designed for clarity and simplicity Cooler not only supports standard language features but also includes a powerful code generation backend that leverages LLVM IR for native code generation.
+
+## Platform Support & Requirements ⚙️
+
+
+### Requirements
+- Go 1.19 or higher
+- Clang compiler
+- For Windows users:
+  - Visual Studio Build Tools (not needed for Windows 11)
+  - LLVM toolchain
+
+#### Supported Platforms
+- ✅ Windows
+- ✅ Linux
+- ⚠️ macOS (some features may have limited compatibility)
+
 
 ---
 
 ## Overview
-
-Cooler transforms COOL source code into optimized LLVM IR, enabling advanced runtime features such as dynamic dispatch, comprehensive error reporting, and seamless memory management. Its architecture is divided into clear phases:
-- **Lexical Analysis & Preprocessing**
 - **Parsing & Pratt Parsing**
 - **Semantic Analysis & Inheritance Graph Construction**
 - **Visualization of AST and Class Hierarchies**
