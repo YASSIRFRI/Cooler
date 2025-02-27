@@ -346,7 +346,7 @@ func (cg *CodeGenerator) buildDispatchTableForBuiltins() {
         
         vtableGlobal := cg.module.NewGlobalDef(
             fmt.Sprintf("vtable_%s", className), 
-            constant.NewArray(arrayType, elements...)
+            constant.NewArray(arrayType, elements...),
         )
         cg.dispatchTables[className] = vtableGlobal
         
