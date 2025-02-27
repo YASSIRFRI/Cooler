@@ -15,12 +15,12 @@
 @str_2 = global [7 x i8] c"Object\00"
 @str_obj_3 = constant { i8* } { i8* getelementptr inbounds ([7 x i8], [7 x i8]* @str_2, i32 0, i32 0) }
 @vtable_Object = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_copy to %ObjectStruct* (%ObjectStruct*)*)]
-@vtable_Int = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* null, %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%IntStruct*)* @Int_copy to %ObjectStruct* (%ObjectStruct*)*)]
+@vtable_Int = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* null, %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%ObjectStruct*)* @Int_copy to %ObjectStruct* (%ObjectStruct*)*)]
 @vtable_String = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%StringStruct*)* @String_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* null]
 @vtable_Bool = global [3 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* null]
 @vtable_IO = global [7 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_copy to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IOStruct* (%IOStruct*, %StringStruct*)* @IO_out_string to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IOStruct* (%IOStruct*, %IntStruct*)* @IO_out_int to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%IOStruct*)* @IO_in_string to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%IOStruct*)* @IO_in_int to %ObjectStruct* (%ObjectStruct*)*)]
 @vtable_Array = global [7 x %ObjectStruct* (%ObjectStruct*)*] [%ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_abort to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%StringStruct* (%ObjectStruct*)* @Object_type_name to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ObjectStruct* (%ObjectStruct*)* @Object_copy to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%IntStruct* (%ObjectStruct*)* @Array_length to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (i8* (%ObjectStruct*, i64)* @Array_get to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (void (%ObjectStruct*, i64, i8*)* @Array_set to %ObjectStruct* (%ObjectStruct*)*), %ObjectStruct* (%ObjectStruct*)* bitcast (%ArrayStruct* (%ObjectStruct*, i64)* @Array_resize to %ObjectStruct* (%ObjectStruct*)*)]
-@vtable_Main = constant [1 x i8*] [i8* bitcast (%ObjectStruct* (%Main_struct*)* @Main_main to i8*)]
+@vtable_Main = constant [1 x i8*] [i8* bitcast (%ObjectStruct* (%ObjectStruct*)* @Main_main to i8*)]
 @str_4 = global [2 x i8] c"\0A\00"
 @str_obj_5 = constant { i8* } { i8* getelementptr inbounds ([2 x i8], [2 x i8]* @str_4, i32 0, i32 0) }
 
@@ -113,19 +113,20 @@ entry:
 	ret %ObjectStruct* %1
 }
 
-define %IntStruct* @Int_copy(%IntStruct* %self) {
+define %IntStruct* @Int_copy(%ObjectStruct* %self) {
 entry:
-	%0 = call i8* @malloc(i64 16)
-	%1 = bitcast i8* %0 to %IntStruct*
-	%2 = getelementptr %IntStruct, %IntStruct* %self, i32 0, i32 0
-	%3 = load i8*, i8** %2
-	%4 = getelementptr %IntStruct, %IntStruct* %1, i32 0, i32 0
-	store i8* %3, i8** %4
-	%5 = getelementptr %IntStruct, %IntStruct* %self, i32 0, i32 1
-	%6 = load i32, i32* %5
-	%7 = getelementptr %IntStruct, %IntStruct* %1, i32 0, i32 1
-	store i32 %6, i32* %7
-	ret %IntStruct* %1
+	%0 = bitcast %ObjectStruct* %self to %IntStruct*
+	%1 = call i8* @malloc(i64 16)
+	%2 = bitcast i8* %1 to %IntStruct*
+	%3 = getelementptr %IntStruct, %IntStruct* %0, i32 0, i32 0
+	%4 = load i8*, i8** %3
+	%5 = getelementptr %IntStruct, %IntStruct* %2, i32 0, i32 0
+	store i8* %4, i8** %5
+	%6 = getelementptr %IntStruct, %IntStruct* %0, i32 0, i32 1
+	%7 = load i32, i32* %6
+	%8 = getelementptr %IntStruct, %IntStruct* %2, i32 0, i32 1
+	store i32 %7, i32* %8
+	ret %IntStruct* %2
 }
 
 define %IOStruct* @IO_out_string(%IOStruct* %self, %StringStruct* %str) {
@@ -289,16 +290,17 @@ entry:
 	%2 = bitcast [1 x i8*]* @vtable_Main to i8*
 	%3 = getelementptr %Main_struct, %Main_struct* %1, i32 0, i32 0
 	store i8* %2, i8** %3
-	%4 = call %ObjectStruct* @Main_main(%Main_struct* %1)
+	%4 = bitcast %Main_struct* %1 to %ObjectStruct*
+	%5 = call %ObjectStruct* @Main_main(%ObjectStruct* %4)
 	ret i32 0
 }
 
-define %ObjectStruct* @Main_main(%Main_struct* %self) {
+define %ObjectStruct* @Main_main(%ObjectStruct* %self) {
 entry:
-	%0 = alloca %Main_struct*
-	store %Main_struct* %self, %Main_struct** %0
-	%1 = load %Main_struct*, %Main_struct** %0
-	%2 = bitcast %Main_struct* %1 to %Main_struct*
+	%0 = alloca %ObjectStruct*
+	store %ObjectStruct* %self, %ObjectStruct** %0
+	%1 = load %ObjectStruct*, %ObjectStruct** %0
+	%2 = bitcast %ObjectStruct* %1 to %Main_struct*
 	%3 = alloca %Main_struct*
 	store %Main_struct* %2, %Main_struct** %3
 	%4 = alloca %IntStruct*
