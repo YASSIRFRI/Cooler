@@ -1,60 +1,24 @@
-(* COOL Program Demonstrating Method Overriding *)
-
-class Animal {
-    speak() : String {
-        "I am an animal.\n"
-    };
+class Shape {
+   draw() : String { "Generic Shape" };
 };
 
-class Dog inherits Animal {
-    speak() : String {
-        "Woof!\n"
-    };
+class Circle inherits Shape {
+   draw() : String { "Circle" };
 };
 
-class Cat inherits Animal {
-    speak() : String {
-        "Meow!\n"
-    };
+class Square inherits Shape {
+   draw() : String { "Square" };
 };
 
-
-class Bird inherits Dog {
-    speak() : String {
-        "Chirp!\n"
-    };
-};
-
-class Fish inherits Cat {
-    speak() : String {
-        "Blub blub!\n"
-    };
-};
-
-class Parrot inherits Bird {
-    speak() : String {
-        "Polly wants a cracker!\n"
-    };
-};
-
-class Goldfish inherits Fish {
-    speak() : String {
-        "Glub glub!\n"
-    };
-};
-
-
-class Main inherits IO{
-    main() : Object {
-        let animal : Animal <- new Animal,
-            dog : Animal    <- new Dog,
-            cat : Animal    <- new Cat,
-            bird : Bird     <- new Bird
-        in {
-            out_string(animal.speak());
-            out_string(dog.speak());
-            out_string(cat.speak());
-            out_string(bird.speak());
-        }
-    };
+class Main inherits IO {
+   main() : Object {
+      let my_shape : Shape <- new Circle in {
+         case my_shape of
+            c : Circle => out_string("It's a circle.\n");
+            s : Square => out_string("It's a square.\n");
+            sh : Shape => out_string("It's some kind of shape.\n");
+         esac;
+         0
+      }
+   };
 };

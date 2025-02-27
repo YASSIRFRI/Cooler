@@ -1337,7 +1337,6 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             }else{
                 return cg.currentBlock.NewCall(builtinFn, args...)
             }
-            return constant.NewNull(types.NewPointer(types.I8))
         }
 
         key := fmt.Sprintf("%s.%s", staticType, n.Method.Ident)
@@ -1354,28 +1353,27 @@ func (cg *CodeGenerator) genExpr(node parser.Node) value.Value {
             constant.NewInt(types.I32, 0),
             constant.NewInt(types.I32, 0),
         )
-        // vtPtr is now i8**. Load i8* from it:
         vtField := cg.currentBlock.NewLoad(types.NewPointer(types.I8), vtPtr)
+        
         layout := cg.dispatchTableLayouts[staticType]
-        commonSelfType := cg.getClassPtrType("Object")
-        commonMethodFnType := types.NewFunc(commonSelfType, commonSelfType)
-        commonMethodPtrType := types.NewPointer(commonMethodFnType)
-        arrType := types.NewArray(uint64(len(layout)), commonMethodPtrType)
-
+        arrType := types.NewArray(uint64(len(layout)), types.NewPointer(types.I8))
         vtablePtr := cg.currentBlock.NewBitCast(vtField, types.NewPointer(arrType))
-
+        
         methodPtrPtr := cg.currentBlock.NewGetElementPtr(
             arrType,
             vtablePtr,
             constant.NewInt(types.I32, 0),
             constant.NewInt(types.I32, int64(idx)),
         )
+        
         methodPtr := cg.currentBlock.NewLoad(types.NewPointer(types.I8), methodPtrPtr)
+        
         staticFnName := fmt.Sprintf("%s_%s", staticType, n.Method.Ident)
         staticFn := findFuncByName(cg.module, staticFnName)
         if staticFn == nil {
             return constant.NewNull(types.NewPointer(types.I8))
         }
+        
         castedFn := cg.currentBlock.NewBitCast(methodPtr, staticFn.Type())
         return cg.currentBlock.NewCall(castedFn, args...)
 
