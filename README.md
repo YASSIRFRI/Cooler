@@ -44,8 +44,9 @@ Cooler extends the COOL language with powerful features to enhance modularity an
 - **Usage:**
   ```cool
   -- main.cool
-  import "module1.cool";
-  import "module2.cool";
+  import module1.cool;
+  -- or you can also use
+  import module2.cl;
 
   class Main inherits IO {
       main() : Object {
@@ -64,11 +65,14 @@ Cooler introduces two container types to provide flexible data storage options:
    - **Usage:**
      ```cool
      class Main inherits IO {
-         arr : Array[Int] <- new Array[Int]; -- Initialize an array of 10 Ints by default
          main() : Object {
              {
+              -- Initialize an array of 10 Ints by default 
+              let arr : Array[Int] <- new Array[Int]; in {
+                 arr.resize(100);
                  arr.set(0, 5);
                  out_int(arr.get(0));
+              }
              }
          };
      };
@@ -79,6 +83,7 @@ Cooler introduces two container types to provide flexible data storage options:
    - **Technical Details:** The linked list provides dynamic resizing and supports insertion, deletion, and search operations. It uses COOL's object system to store elements, ensuring type safety.
    - **Usage:**
      ```cool
+     import List;
      class Main inherits IO {
          list : List[String] <- new List[String];
          main() : Object {
