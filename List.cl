@@ -1,0 +1,88 @@
+class Node {
+    value : Int;
+    next  : Node;
+
+    get_value() : Int {
+        value
+    };
+
+    set_value(v : Int) : Node {
+        {
+            value <- v;
+            self;
+        }
+    };
+
+    get_next() : Node {
+        next
+    };
+
+    set_next(n : Node) : Node {
+        {
+            next <- n;
+            self;
+        }
+    };
+
+    init_node() : Node {
+        {
+            value <- 0;
+            next <- self;
+            self;
+        }
+    };
+};
+
+class List inherits IO {
+    head : Node;
+
+    -- Initialize the list with a sentinel node.
+    init_list() : List {
+        {
+            head <- new Node;
+            head.init_node();
+            self;
+        }
+    };
+
+    insert(val : Int) : List {
+        let new_node : Node <- new Node in {
+            new_node.set_value(val);
+            new_node.set_next(head.get_next());
+            head.set_next(new_node);
+            self;
+        }
+    };
+
+    print() : List {
+        let temp : Node <- head.get_next() in {
+            while not (temp = head) loop {
+                out_int(temp.get_value());
+                out_string(" ");
+                temp <- temp.get_next();
+            } pool;
+            out_string("\n");
+            self;
+        }
+    };
+
+    -- Search for a value in the list. Returns true if found, false otherwise.
+    search(val : Int) : Bool {
+        let temp : Node <- head.get_next() in {
+            let found : Bool <- false in {
+                while not (temp = head) loop {
+                    if temp.get_value() = val then {
+                        found <- true;
+                        -- Break the loop by setting temp to head.
+                        temp <- head;
+                    } else {
+                        temp <- temp.get_next();
+                    }fi;
+                } pool;
+                found
+            }
+        }
+    };
+};
+
+
