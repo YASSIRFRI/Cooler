@@ -87,7 +87,6 @@ func main() {
 	exeName := output
 	if exeName == "" {
 		exeName = baseName
-		// On Windows, append .exe if needed.
 		if os.PathSeparator == '\\' && !strings.HasSuffix(exeName, ".exe") {
 			exeName += ".exe"
 		}
@@ -96,7 +95,6 @@ func main() {
 	clangCmd := exec.Command("clang", llFile, "-o", exeName)
 	clangCmd.Stdout = os.Stdout
 	clangCmd.Stderr = os.Stderr
-	//fmt.Printf("Invoking clang to produce executable %q...\n", exeName)
 	if err := clangCmd.Run(); err != nil {
 		log.Fatalf("Clang failed: %v", err)
 	}

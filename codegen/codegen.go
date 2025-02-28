@@ -422,14 +422,15 @@ func (cg *CodeGenerator) declareMalloc() {
 }
 
 func (cg *CodeGenerator) defineStringLength() {
-    param := ir.NewParam("str", cg.stringType)
+    param := ir.NewParam("str", cg.getClassPtrType("Object"))
 
     fn := cg.module.NewFunc("String_length", types.I32, param)
     entry := fn.NewBlock("entry")
+    stringSelf := entry.NewBitCast(fn.Params[0], cg.stringType)
 
-    // GEP into the string struct to get the raw i8* pointer
+
     charPtrPtr := entry.NewGetElementPtr(
-        cg.stringStruct, fn.Params[0],
+        cg.stringStruct, stringSelf,
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 1),
     )
@@ -458,26 +459,36 @@ func (cg *CodeGenerator) defineStringLength() {
 
 
 func (cg *CodeGenerator) defineStringConcat() {
-    s1 := ir.NewParam("str", cg.stringType)
+    s1 := ir.NewParam("str", cg.getClassPtrType("Object"))
     s2 := ir.NewParam("other", cg.stringType)
     fn := cg.module.NewFunc("String_concat", cg.stringType, s1, s2)
     entry := fn.NewBlock("entry")
+    
+    // Cast the Object* to String* at the beginning of the function
+    stringSelf := entry.NewBitCast(fn.Params[0], cg.stringType)
+
+    // Extract character pointers
     charPtrPtr1 := entry.NewGetElementPtr(
-        cg.stringStruct, fn.Params[0],
+        cg.stringStruct, stringSelf,
         constant.NewInt(types.I32, 0),
-        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
     )
     charPtr1 := entry.NewLoad(types.NewPointer(types.I8), charPtrPtr1)
 
     charPtrPtr2 := entry.NewGetElementPtr(
         cg.stringStruct, fn.Params[1],
         constant.NewInt(types.I32, 0),
-        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
     )
     charPtr2 := entry.NewLoad(types.NewPointer(types.I8), charPtrPtr2)
 
-    len1 := entry.NewCall(findFuncByName(cg.module, "String_length"), fn.Params[0])
-    len2 := entry.NewCall(findFuncByName(cg.module, "String_length"), fn.Params[1])
+    // IMPORTANT: Cast back to Object* before calling String_length
+    objSelf := entry.NewBitCast(stringSelf, cg.getClassPtrType("Object"))
+    objParam1 := entry.NewBitCast(fn.Params[1], cg.getClassPtrType("Object"))
+    
+    len1 := entry.NewCall(findFuncByName(cg.module, "String_length"), objSelf)
+    len2 := entry.NewCall(findFuncByName(cg.module, "String_length"), objParam1)
+    
     total := entry.NewAdd(len1, len2)
     totalPlus := entry.NewAdd(total, constant.NewInt(types.I32, 1))
     totalLL := entry.NewSExt(totalPlus, types.I64)
@@ -527,20 +538,39 @@ func (cg *CodeGenerator) defineStringConcat() {
 }
 
 func (cg *CodeGenerator) defineStringSubstr() {
-    s := ir.NewParam("str", cg.stringType)
-    start := ir.NewParam("start", types.I32)
-    length := ir.NewParam("len", types.I32)
+    // Change parameter types to match dispatch table expectations
+    s := ir.NewParam("str", cg.getClassPtrType("Object"))
+    start := ir.NewParam("start", cg.getClassPtrType("Int"))
+    length := ir.NewParam("len", cg.getClassPtrType("Int"))
     fn := cg.module.NewFunc("String_substr", cg.stringType, s, start, length)
     entry := fn.NewBlock("entry")
+    
+    // Cast Object* to String*
+    stringSelf := entry.NewBitCast(fn.Params[0], cg.stringType)
+    
+    // Unbox the Int parameters
+    startPtr := entry.NewGetElementPtr(
+        cg.intStruct, fn.Params[1],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    startVal := entry.NewLoad(types.I32, startPtr)
+    
+    lenPtr := entry.NewGetElementPtr(
+        cg.intStruct, fn.Params[2],
+        constant.NewInt(types.I32, 0),
+        constant.NewInt(types.I32, 1),
+    )
+    lenVal := entry.NewLoad(types.I32, lenPtr)
 
     charPtrPtr := entry.NewGetElementPtr(
-        cg.stringStruct, fn.Params[0],
+        cg.stringStruct, stringSelf,
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 1),
     )
     charPtr := entry.NewLoad(types.NewPointer(types.I8), charPtrPtr)
 
-    lenPlus := entry.NewAdd(fn.Params[2], constant.NewInt(types.I32, 1))
+    lenPlus := entry.NewAdd(lenVal, constant.NewInt(types.I32, 1))
     lenPlusLL := entry.NewSExt(lenPlus, types.I64)
     mallocFn := findFuncByName(cg.module, "malloc")
     newCharPtr := entry.NewCall(mallocFn, lenPlusLL)
@@ -552,12 +582,12 @@ func (cg *CodeGenerator) defineStringSubstr() {
     entry.NewBr(loopBlock)
 
     idx := loopBlock.NewLoad(types.I32, idxAlloca)
-    cond := loopBlock.NewICmp(enum.IPredSLT, idx, fn.Params[2])
+    cond := loopBlock.NewICmp(enum.IPredSLT, idx, lenVal)
     bodyBlock := fn.NewBlock("body")
     finishBlock := fn.NewBlock("finish")
     loopBlock.NewCondBr(cond, bodyBlock, finishBlock)
 
-    sum := bodyBlock.NewAdd(fn.Params[1], idx)
+    sum := bodyBlock.NewAdd(startVal, idx)
     srcPtr := bodyBlock.NewGetElementPtr(types.I8, charPtr, sum)
     ch := bodyBlock.NewLoad(types.I8, srcPtr)
     dstPtr := bodyBlock.NewGetElementPtr(types.I8, newCharPtr, idx)
@@ -566,7 +596,7 @@ func (cg *CodeGenerator) defineStringSubstr() {
     bodyBlock.NewStore(idxNext, idxAlloca)
     bodyBlock.NewBr(loopBlock)
 
-    dstTerm := finishBlock.NewGetElementPtr(types.I8, newCharPtr, fn.Params[2])
+    dstTerm := finishBlock.NewGetElementPtr(types.I8, newCharPtr, lenVal)
     finishBlock.NewStore(constant.NewInt(types.I8, 0), dstTerm)
 
     sizeStringObj := constant.NewInt(types.I64, cg.typeSize(cg.stringStruct))
@@ -1977,26 +2007,21 @@ func (cg *CodeGenerator) defineStringCopy() {
 
 
 func (cg *CodeGenerator) defineIntBuiltins() {
-    // Change parameter type from Int* to Object* for vtable compatibility
     copyFn := cg.module.NewFunc(
         "Int_copy",
         cg.getClassPtrType("Int"),
-        ir.NewParam("self", cg.getClassPtrType("Object")), // Changed from Int to Object
+        ir.NewParam("self", cg.getClassPtrType("Object")),
     )
     entry := copyFn.NewBlock("entry")
-    
-    // Cast Object* to Int* at the beginning
     intSelf := entry.NewBitCast(copyFn.Params[0], cg.getClassPtrType("Int"))
-    
     mallocFn := findFuncByName(cg.module, "malloc")
     size := constant.NewInt(types.I64, cg.typeSize(cg.intStruct))
     rawPtr := entry.NewCall(mallocFn, size)
     newInt := entry.NewBitCast(rawPtr, cg.getClassPtrType("Int"))
     
-    // Use the casted intSelf for further operations
     vtPtr := entry.NewGetElementPtr(
         cg.intStruct,
-        intSelf, // Use casted value
+        intSelf, 
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 0),
     )
@@ -2011,7 +2036,7 @@ func (cg *CodeGenerator) defineIntBuiltins() {
     
     valPtr := entry.NewGetElementPtr(
         cg.intStruct,
-        intSelf, // Use casted value
+        intSelf,
         constant.NewInt(types.I32, 0),
         constant.NewInt(types.I32, 1),
     )
