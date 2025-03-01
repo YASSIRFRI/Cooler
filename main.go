@@ -1,6 +1,10 @@
 package main
 
 import (
+	"cooler/codegen"
+	"cooler/lexer"
+	"cooler/parser"
+	"cooler/semantic"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -9,10 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"cooler/codegen"
-	"cooler/lexer"
-	"cooler/parser"
-	"cooler/semantic"
 )
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 	}
 
 	sourceFile := flag.Arg(0)
-	if filepath.Ext(sourceFile) != ".cool" || filepath.Ext(sourceFile) == ".cl" {
+	if filepath.Ext(sourceFile) != ".cool" || filepath.Ext(sourceFile) != ".cl" {
 		fmt.Printf("Error: Source file %q must have a .cool or .cl extension.\n", sourceFile)
 		os.Exit(1)
 	}
@@ -40,23 +40,25 @@ func main() {
 	fmt.Printf("Compiling %s...\n", sourceFile)
 
 	ms := lexer.NewModuleSystem()
-    expandedSource, err := lexer.ExpandImports(string(srcBytes), ".", ms)
-    if err != nil {
-        log.Fatalf("Import expansion error: %v\n", err)
-    }
+	// TODO: ExpandImports should not allow repeated imports.
+	expandedSource, err := lexer.ExpandImports(string(srcBytes), ".", ms)
+	if err != nil {
+		log.Fatalf("Import expansion error: %v\n", err)
+	}
 
-    if ms.HasErrors() {
-        for _, e := range ms.Errors() {
-            fmt.Printf("Import error: %v\n", e)
-        }
-        return
-    }
+	if ms.HasErrors() {
+		for _, e := range ms.Errors() {
+			fmt.Printf("Import error: %v\n", e)
+		}
+		return
+	}
 
 	lx := lexer.NewLexer(expandedSource)
 	var tokens []*lexer.Token
 	for tok := lx.NextToken(); tok != nil; tok = lx.NextToken() {
 		tokens = append(tokens, tok)
 	}
+	// TODO: You could make use of the lexer objecet instead of reading all tokens.
 	p := parser.NewParser(tokens)
 	prog, err := p.ParseProgram()
 	if err != nil {
@@ -92,6 +94,7 @@ func main() {
 		}
 	}
 
+	// TODO: Make sure that clang is either installed and include that in readme.
 	clangCmd := exec.Command("clang", llFile, "-o", exeName)
 	clangCmd.Stdout = os.Stdout
 	clangCmd.Stderr = os.Stderr
