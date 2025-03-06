@@ -61,17 +61,17 @@ func (st *SymbolTable) Lookup(name string) (*SymbolEntry, bool) {
 //
 // --------------------------------------------------------
 type SemanticAnalyzer struct {
-	global   *SymbolTable
-	errors   []string
-	parentOf map[string]string // Maps className -> parentName, for inheritance
+	global            *SymbolTable
+	errors            []string
+	parentOf          map[string]string // Maps className -> parentName, for inheritance
 	arrayElementTypes map[string]string // Maps array variable → element type
 }
 
 func NewSemanticAnalyzer() *SemanticAnalyzer {
 	sa := &SemanticAnalyzer{
-		global:   NewSymbolTable(nil),
-		errors:   []string{},
-		parentOf: make(map[string]string),
+		global:            NewSymbolTable(nil),
+		errors:            []string{},
+		parentOf:          make(map[string]string),
 		arrayElementTypes: make(map[string]string),
 	}
 
@@ -140,7 +140,6 @@ func (sa *SemanticAnalyzer) addObjectMethods() {
 	}
 }
 
-
 func (sa *SemanticAnalyzer) addIOMethods() {
 	methods := []struct {
 		fullName   string
@@ -191,7 +190,6 @@ func (sa *SemanticAnalyzer) addIOMethods() {
 		})
 	}
 }
-
 
 func (sa *SemanticAnalyzer) addStringMethods() {
 	// Built-in: length() : Int, concat(String) : String, substr(Int, Int) : String
@@ -258,11 +256,11 @@ func (sa *SemanticAnalyzer) Analyze(program *parser.Program) {
 	sa.typeCheck(program)
 }
 
-
 func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 	// First pass: register all classes.
 	for _, classNode := range prog.Classes {
 		className := classNode.Name
+		// TODO: What about Int, and Bool?
 		// Disallow redefinition of basic classes.
 		if className == "String" {
 			sa.verbosef("buildClassSymbols", "Redefinition of basic class String is not allowed")
@@ -292,6 +290,7 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 		}
 		if classNode.Inherits != "" {
 			// It is an error to inherit from the basic class String.
+			// TODO: What about Int, and Bool?
 			if classNode.Inherits == "String" {
 				sa.verbosef("buildClassSymbols", "class %q cannot inherit from basic class String", className)
 			} else if _, ok := sa.global.Lookup(classNode.Inherits); !ok {
@@ -305,7 +304,6 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 		}
 	}
 }
-
 
 func (sa *SemanticAnalyzer) buildFeatures(prog *parser.Program) {
 	for _, classNode := range prog.Classes {
@@ -405,7 +403,6 @@ func (sa *SemanticAnalyzer) registerMethod(className string, method *parser.Meth
 			className, method.Ident, gerr)
 	}
 }
-
 
 func (sa *SemanticAnalyzer) typeCheck(prog *parser.Program) {
 	// Build a map from class name to class AST node.
@@ -1029,3 +1026,4 @@ func (sa *SemanticAnalyzer) addArrayMethods() {
 		})
 	}
 }
+
