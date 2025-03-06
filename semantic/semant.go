@@ -260,10 +260,9 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 	// First pass: register all classes.
 	for _, classNode := range prog.Classes {
 		className := classNode.Name
-		// TODO: What about Int, and Bool?
-		// Disallow redefinition of basic classes.
-		if className == "String" {
-			sa.verbosef("buildClassSymbols", "Redefinition of basic class String is not allowed")
+				// Disallow redefinition of basic classes.
+		if className == "String" || className == "Int" || className == "Bool" {
+			sa.verbosef("buildClassSymbols", "Redefinition of basic class %s is not allowed", className)
 			continue
 		}
 		// Do not worry about inheritance here.
@@ -289,12 +288,13 @@ func (sa *SemanticAnalyzer) buildClassSymbols(prog *parser.Program) {
 			classNode.Inherits = "Object"
 		}
 		if classNode.Inherits != "" {
-			// It is an error to inherit from the basic class String.
-			// TODO: What about Int, and Bool?
-			if classNode.Inherits == "String" {
-				sa.verbosef("buildClassSymbols", "class %q cannot inherit from basic class String", className)
+			// It is an error to inherit from basic classes.
+			if classNode.Inherits == "String" || classNode.Inherits == "Int" || classNode.Inherits == "Bool" {
+				sa.verbosef("buildClassSymbols", "class %q cannot inherit from basic class %s", 
+className, classNode.Inherits)
 			} else if _, ok := sa.global.Lookup(classNode.Inherits); !ok {
-				sa.verbosef("buildClassSymbols", "class %q inherits from unknown class %q", className, classNode.Inherits)
+				sa.verbosef("buildClassSymbols", "class %q inherits from unknown class %q", 
+className, classNode.Inherits)
 			} else {
 				sa.parentOf[className] = classNode.Inherits
 			}

@@ -4,7 +4,7 @@ import (
 	"cooler/codegen"
 	"cooler/lexer"
 	"cooler/parser"
-	"cooler/semantic"
+	semant "cooler/semantic"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -41,11 +41,11 @@ func main() {
 
 	ms := lexer.NewModuleSystem()
 	// TODO: ExpandImports should not allow repeated imports.
+	// you are right, I only check for cyclic imports, but I should also check for repeated imports.
 	expandedSource, err := lexer.ExpandImports(string(srcBytes), ".", ms)
 	if err != nil {
 		log.Fatalf("Import expansion error: %v\n", err)
 	}
-
 	if ms.HasErrors() {
 		for _, e := range ms.Errors() {
 			fmt.Printf("Import error: %v\n", e)
@@ -59,6 +59,7 @@ func main() {
 		tokens = append(tokens, tok)
 	}
 	// TODO: You could make use of the lexer objecet instead of reading all tokens.
+	// I agree, I should use the lexer object instead of reading all tokens.
 	p := parser.NewParser(tokens)
 	prog, err := p.ParseProgram()
 	if err != nil {
@@ -94,7 +95,26 @@ func main() {
 		}
 	}
 
-	// TODO: Make sure that clang is either installed and include that in readme.
+	// Check if clang is installed
+	_, err = exec.LookPath("clang")
+	if err != nil {
+		fmt.Println("\033[1;31mError: Clang compiler not found!\033[0m")
+		fmt.Println("\033[1;33mTo install Clang:\033[0m")
+
+		if os.PathSeparator == '\\' {
+			fmt.Println("  - Download LLVM from https://github.com/llvm/llvm-project/releases/")
+			fmt.Println("  - Or install with Chocolatey: choco install llvm")
+			fmt.Println("  - Ensure clang.exe is in your PATH environment variable")
+		} else {
+			fmt.Println("  - Ubuntu/Debian: sudo apt-get install clang")
+			fmt.Println("  - Fedora/RHEL: sudo dnf install clang")
+			fmt.Println("  - macOS: brew install llvm")
+		}
+
+		fmt.Println("\033[1;33mAfter installation, try compiling again.\033[0m")
+		os.Exit(1)
+	}
+
 	clangCmd := exec.Command("clang", llFile, "-o", exeName)
 	clangCmd.Stdout = os.Stdout
 	clangCmd.Stderr = os.Stderr

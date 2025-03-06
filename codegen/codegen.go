@@ -627,6 +627,8 @@ func (cg *CodeGenerator) createClassType(classNode *parser.Class, classMap map[s
 	}
 
 	// TODO: What is this thing doing?
+
+	//checks if the class has already finalized its layout particularly for builin
 	if st, ok := cg.classTypes[classNode.Name].(*types.StructType); ok && len(st.Fields) > 0 {
 		return st
 	}
